@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 import sys
 import argparse
-from collections import Counter
-from itertools import combinations,groupby
-from operator import itemgetter
+from multiprocessing import Pool
+# from collections import Counter
+# from itertools import combinations,groupby
+# from operator import itemgetter
 
 import edlib
 from tqdm import tqdm
@@ -48,41 +49,49 @@ rev_compl_l[ord('T')] = 'A'
 def rev_compl(s):
     return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
-def get_lr_bc_matches(reads, a1):
-    a2 = rev_compl(a1)
+def get_aln(seq):
+    b = ''
+    d = '-1'
+    loc = 'NA'
+    aln_1 = edlib.align(a1, seq,'HW', 'locations')
+    aln_2 = edlib.align(a2, seq,'HW', 'locations')
+    if aln_1['editDistance'] == aln_2['editDistance']:
+        pass
+    elif aln_1['editDistance'] < aln_2['editDistance']:
+        locs = [x[1] for x in aln_1['locations']]
+        if 35 <= min(locs) <= max(locs) <=50 or 120 <= min(locs) <= max(locs) <= 160:
+            loc = min(locs)
+            b = seq[loc-2:max(locs)+20]
+            d = aln_1['editDistance']
+    else:
+        locs = [x[0]-len(seq)-1 for x in aln_2['locations']]
+        if -40 >= max(locs) >= min(locs) >= -60 or -80 >= max(locs) >= min(locs) >= -120:
+            loc = max(locs)
+            b = seq[min(locs)-20:loc+2]
+            d = aln_2['editDistance']
+    return (
+        b,
+        d,
+        loc,
+    )
+
+
+def get_lr_bc_matches(reads, threads):
+    
     lr_bc_matches = list()
+    rnames = list()
+    seqs = list()
     for fastq in reads:
+        print(f'Reading {fastq}')
         for idx,l in tqdm(enumerate(open(fastq))):
-            if idx % 0 == 0:
-                rname = l.split()[0][1:]
-                b = ''
-                d = '-1'
-                loc = 'NA'
-            if idx % 4 != 1:
-                continue
-            l = l.rstrip()
-            aln_1 = edlib.align(a1, l,'HW', 'locations')
-            aln_2 = edlib.align(a2, l,'HW', 'locations')
-            if aln_1['editDistance'] == aln_2['editDistance']:
-                pass
-            elif aln_1['editDistance'] < aln_2['editDistance']:
-                locs = [x[1] for x in aln_1['locations']]
-                if 35 <= min(locs) <= max(locs) <=50 or 120 <= min(locs) <= max(locs) <= 160:
-                    b = l[loc-2:max(locs)+20]
-                    d = aln_1['editDistance']
-                    loc = min(locs)
-            else:
-                locs = [x[0]-len(l)-1 for x in aln_2['locations']]
-                if -40 >= max(locs) >= min(locs) >= -60 or -80 >= max(locs) >= min(locs) >= -120:
-                    b = l[min(locs)-20:loc+2]
-                    d = aln_2['editDistance']
-                    loc = max(locs)
-            lr_bc_matches.append((
-                rname,
-                b,
-                d,
-                l,
-            ))
+            if idx % 4 == 0:
+                rnames.append(l.split()[0][1:])
+            if idx % 4 == 1:
+                seqs.append(l.rstrip())
+    print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads')
+    with Pool(threads) as p:
+        for n,(b,d,loc) in tqdm(zip(rnames,p.imap(get_aln, seqs))):
+            lr_bc_matches.append((n,b,d,loc))
     return lr_bc_matches
 
 def output_lr_bc_matches(lr_bc_matches, outfile):
@@ -91,8 +100,13 @@ def output_lr_bc_matches(lr_bc_matches, outfile):
 
 def main():
     args = parse_args()
+    print(args)
+    global a1,a2
+    a1 = args.short_read_adapter
+    a2 = rev_compl(a1)
 
-    lr_bc_matches = get_lr_bc_matches(args.reads, args.short_read_adapter)
+
+    lr_bc_matches = get_lr_bc_matches(args.reads, threads=args.threads)
     if args.outfile:
         args.outfile = open(args.outfile, 'w+')
     else:

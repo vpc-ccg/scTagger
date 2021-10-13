@@ -1,0 +1,37 @@
+outpath:
+    ../../analysis/extract-out
+
+exec:
+    split    : py/extract_lr_bc.py
+
+samples:
+    C1:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
+    C2:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
+    D1:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
+    D2:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
+    N1:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
+    N2:
+        ref: homo_sapiens
+        reads:
+            - ../../raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
+
+references:
+    homo_sapiens:
+        annot      : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
+        genome     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+        genome_fai : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
