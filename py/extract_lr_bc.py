@@ -90,7 +90,7 @@ def get_lr_bc_matches(reads, threads):
                 seqs.append(l.rstrip())
     print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads')
     with Pool(threads) as p:
-        for n,(b,d,loc) in tqdm(zip(rnames,p.imap(get_aln, seqs))):
+        for n,(b,d,loc) in tqdm(zip(rnames,p.imap(get_aln, seqs, chunksize=100)), total=len(seqs)):
             lr_bc_matches.append((n,b,d,loc))
     return lr_bc_matches
 

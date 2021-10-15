@@ -1,9 +1,18 @@
 outpath:
-    ../../analysis/extract-out
+    ../../analysis
+
+gurobi:
+    license: gurobi.lic
+    timeout: 1
+
 
 exec:
     split    : py/extract_lr_bc.py
-
+    freddie  :
+        split    : extern/freddie/py/freddie_split.py
+        segment  : extern/freddie/py/freddie_segment.py
+        cluster  : extern/freddie/py/freddie_cluster.py
+        isoforms : extern/freddie/py/freddie_isoforms.py
 samples:
     C1:
         ref: homo_sapiens
