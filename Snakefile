@@ -43,7 +43,7 @@ rule minimap2:
         bam=protected('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d)),
         bai=protected('{}/{{sample}}/{{sample}}.sorted.bam.bai'.format(fred_d)),
     conda:
-        'envs/minimap2.yml'
+        'extern/freddie/envs/minimap2.yml'
     threads:
         32
     resources:
@@ -62,7 +62,7 @@ rule freddie_split:
     output:
         split = directory('{}/{{sample}}/freddie.split'.format(fred_d)),
     conda:
-        'envs/freddie.yml'
+        'extern/freddie/envs/freddie.yml'
     threads:
         32
     resources:
@@ -78,7 +78,7 @@ rule freddie_segment:
     output:
         segment = directory('{}/{{sample}}/freddie.segment'.format(fred_d)),
     conda:
-        'envs/freddie.yml'
+        'extern/freddie/envs/freddie.yml'
     threads:
         32
     resources:
@@ -95,13 +95,13 @@ rule freddie_cluster:
     output:
         cluster = directory('{}/{{sample}}/freddie.cluster'.format(fred_d)),
     conda:
-        'envs/freddie.yml'
+        'extern/freddie/envs/freddie.yml'
     params:
         logs    = directory('{}/{{sample}}/freddie.cluster_logs'.format(fred_d)),
         log     = '{}/{{sample}}/freddie.cluster.log'.format(fred_d),
         timeout = config['gurobi']['timeout'],
     conda:
-        'envs/freddie.yml'
+        'extern/freddie/envs/freddie.yml'
     threads:
         32
     resources:
@@ -109,7 +109,7 @@ rule freddie_cluster:
         time = 999,
     shell:
         'export GRB_LICENSE_FILE={input.license}; '
-        '{input.script} -s {input.segment} -o {output.cluster} -l {params.logs} -t {threads} -to {params.timeout} > {params.log}'
+        '{input.script} -s {input.segment} -o {output.cluster} -l {output.logs} -t {threads} -to {params.timeout} > {output.log}'
 
 rule freddie_isoforms:
     input:
@@ -119,7 +119,7 @@ rule freddie_isoforms:
     output:
         isoforms = protected('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d)),
     conda:
-        'envs/freddie.yml'
+        'extern/freddie/envs/freddie.yml'
     threads:
         8
     resources:
