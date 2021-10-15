@@ -1,0 +1,3 @@
+[submodule "extern/freddie"]
+	path = extern/freddie
+	url = https://github.com/vpc-ccg/freddie/
