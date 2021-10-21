@@ -7,8 +7,9 @@ gurobi:
 
 
 exec:
-    split    : py/extract_lr_bc.py
-    freddie  :
+    match_aln : py/match_lr_bc-aln.py
+    split     : py/extract_lr_bc.py
+    freddie   :
         split    : extern/freddie/py/freddie_split.py
         segment  : extern/freddie/py/freddie_segment.py
         cluster  : extern/freddie/py/freddie_cluster.py
@@ -18,26 +19,38 @@ samples:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13035_C1_GSC/outs/possorted_genome_bam.bam
     C2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13035_C2_GSC/outs/possorted_genome_bam.bam
     D1:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13035_D1_GSC/outs/possorted_genome_bam.bam
     D2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13035_D2_GSC/outs/possorted_genome_bam.bam
     N1:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13032_N1_GSC/outs/possorted_genome_bam.bam
     N2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
+        sr_bam:
+            ../../analysis/scrna/QC/13032_N2_GSC/outs/possorted_genome_bam.bam
 
 references:
     homo_sapiens:

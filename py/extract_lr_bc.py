@@ -2,13 +2,9 @@
 import sys
 import argparse
 from multiprocessing import Pool
-# from collections import Counter
-# from itertools import combinations,groupby
-# from operator import itemgetter
+import gzip
 
-import edlib
 from tqdm import tqdm
-from matplotlib import pyplot as plt
 
 
 def parse_args():
@@ -34,7 +30,7 @@ def parse_args():
                         "--outfile",
                         type=str,
                         default=None,
-                        help="Path to output file. Default: stdout")
+                        help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
     args = parser.parse_args()
     assert args.threads > 0
     return args
@@ -76,12 +72,11 @@ def get_aln(seq):
     )
 
 
-def get_lr_bc_matches(reads, threads):
-    
+def get_lr_bc_matches(fastqs, threads):
     lr_bc_matches = list()
     rnames = list()
     seqs = list()
-    for fastq in reads:
+    for fastq in fastqs:
         print(f'Reading {fastq}')
         for idx,l in tqdm(enumerate(open(fastq))):
             if idx % 4 == 0:
@@ -96,7 +91,7 @@ def get_lr_bc_matches(reads, threads):
 
 def output_lr_bc_matches(lr_bc_matches, outfile):
     for rname,b,d,l in tqdm(lr_bc_matches):
-        print(rname,d,l,b, sep='\t', file=outfile)
+        outfile.write(f'{rname}\t{d}\t{l}\t{b}\n')
 
 def main():
     args = parse_args()
@@ -108,7 +103,7 @@ def main():
 
     lr_bc_matches = get_lr_bc_matches(args.reads, threads=args.threads)
     if args.outfile:
-        args.outfile = open(args.outfile, 'w+')
+        args.outfile = gzip.open(args.outfile, 'wt')
     else:
         args.outfile = sys.stdout
     output_lr_bc_matches(lr_bc_matches, args.outfile)

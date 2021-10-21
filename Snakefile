@@ -1,3 +1,8 @@
+import pysam
+import gzip
+from tqdm import tqdm
+from collections import Counter
+
 configfile: 'config.yaml'
 
 for k in config.keys():
@@ -14,7 +19,10 @@ fred_d = f'{outpath}/freddie-out'
 
 rule all:
     input:
-        expand('{}/{{sample}}/{{sample}}.lr_bc.tsv'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
         expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
@@ -26,7 +34,7 @@ rule extract_lr_br:
         script = config['exec']['split'],
         reads = lambda wildcards: config['samples'][wildcards.sample]['reads'],
     output:
-        tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv'.format(extr_d)),
+        tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
     threads:
         16
     resources:
@@ -127,3 +135,72 @@ rule freddie_isoforms:
         time = 359,
     shell:
         '{input.script} -s {input.split} -c {input.cluster} -o {output.isoforms} -t {threads}'
+
+rule extract_sr_br:
+    input:
+        bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
+    output:
+        tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
+    threads:
+        8
+    resources:
+        mem  = "1G",
+        time = 59,
+    run:
+        outfile = gzip.open(output.tsv, 'wt')
+        for aln in tqdm(pysam.AlignmentFile(input.bam, 'rb', threads=threads)):
+            if aln.flag > 256:
+                continue
+            tags = dict(aln.tags)
+            C = tags.get('CB', 'NA').split('-')[0]
+            U = tags.get('UB', 'NA').split('-')[0]
+            qname = aln.query_name
+            outfile.write(f'{qname}\t{C}\t{U}\n')
+        outfile.close()
+
+
+rule get_top_sr_br:
+    input:
+        tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
+    output:
+        tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
+    threads:
+        1
+    resources:
+        mem  = "8G",
+        time = 59,
+    run:
+        bc = Counter()
+        for l in tqdm(gzip.open(input.tsv)):
+            l = l.decode().rstrip().split('\t')
+            bc[l[1]]+=1
+        total = sum(bc.values())
+        del bc['NA']
+        bc = sorted(((c,b) for b,c in  bc.items()), reverse=True)
+        outfile = gzip.open(output.tsv, 'wt')
+        print(f'{len(bc)}, {total}')
+        for idx in range(0,len(bc),1000):
+            S = sum(c for c,b in bc[idx:idx+1000])
+            print(idx, S, S/total)
+            if S/total < 0.005:
+                break
+            for c,b in bc[idx:idx+1000]:
+                outfile.write(f'{b}\t{c}\n')
+            if bc[idx:idx+1000][-1][0] < 2:
+                break
+        outfile.close()
+
+rule match_aln:
+    input:
+        script  = config['exec']['match_aln'],
+        lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
+        sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    output:
+        lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d)),
+    threads:
+        32
+    resources:
+        mem  = "250G",
+        time = 60*6-1,
+    shell:
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -t {threads} -o {output.lr_tsv}'
