@@ -70,12 +70,11 @@ def get_lr_segments(long_read_segments_tsv):
     lr_names = list()
     lr_segments = list()
     if gz:
-        f = gzip.open(long_read_segments_tsv)
+        f = gzip.open(long_read_segments_tsv, 'rt')
     else:
-        f = open(long_read_segments_tsv)
+        f = open(long_read_segments_tsv, 'r')
     for l in tqdm(f):
         # if len(lr_names) >= 10000: break
-        if gz: l = l.decode()
         l = l.rstrip('\n').split('\t')
         lr_names.append(l[0])
         lr_segments.append(l[3])

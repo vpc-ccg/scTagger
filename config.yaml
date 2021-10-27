@@ -7,6 +7,7 @@ gurobi:
 
 
 exec:
+    match_trie : py/match_lr_bc-trie.py
     match_aln : py/match_lr_bc-aln.py
     split     : py/extract_lr_bc.py
     freddie   :

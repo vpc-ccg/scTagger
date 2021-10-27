@@ -19,6 +19,7 @@ fred_d = f'{outpath}/freddie-out'
 
 rule all:
     input:
+        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
@@ -204,3 +205,20 @@ rule match_aln:
         time = 60*6-1,
     shell:
         '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -t {threads} -o {output.lr_tsv}'
+
+rule match_trie:
+    input:
+        script  = config['exec']['match_trie'],
+        lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
+        sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    output:
+        lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
+    benchmark:
+        '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.benchmark.txt'.format(extr_d)
+    threads:
+        1
+    resources:
+        mem  = "250G",
+        time = 60*6-1,
+    shell:
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'        

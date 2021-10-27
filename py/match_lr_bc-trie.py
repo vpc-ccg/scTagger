@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 import sys
 import argparse
+import gzip
+import math
 
-from tqdm import tqdm
 import pandas as pd
+import numpy as np
+from tqdm import tqdm
 
 
 
@@ -22,14 +25,19 @@ def parse_args():
                         help="Short-read barcode list TSV file")
     parser.add_argument("-mr",
                         "--max-error",
-                        default=0,
+                        default=2,
                         type=int,
-                        help="Number of maximum error for barcode matching. Default: 0")
+                        help="Number of maximum error for barcode matching. Default: 22")
     parser.add_argument("-bl",
                         "--barcode-length",
                         default=16,
                         type=int,
                         help="Length of barcodes. Default: 16")
+    parser.add_argument("-o",
+                        "--outfile",
+                        type=str,
+                        default=None,
+                        help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
     args = parser.parse_args()
     return args
 
@@ -92,61 +100,69 @@ class Trie(object):
             self.output[i] = set()
 
         self.dfs(node, x, self.max_error, 0)
+        for i in range(0, self.max_error):
+            for j in range(i + 1, self.max_error + 1):
+                self.output[j] -= self.output[i]
 
         return self.output
 
 def read_long_reads(path):
 
-    names=["read_id", "distance", "stand","segment"]
+    names=["read_id", "distance", "strand","segment"]
+    print('Reading long reads segments')
     long_segment = pd.read_csv(path, delimiter = "\t", names=names)
 
     return long_segment
 
 def read_short_reads(path):
-
-    names=["barcode", "trash"]
+    print('Reading short reads barcodes')
+    names=["barcode", "frequency"]
     selected_barcode = pd.read_csv(path, delimiter = "\t", names=names)
-
+    print(f'There {selected_barcode.shape[0]} SR barcodes')
     return selected_barcode
 
-def rev(x):
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
-    return "".join(complement.get(base, base) for base in reversed(x))
+rev_compl_l = [chr(i) for i in range(128)]
+rev_compl_l[ord('A')] = 'T'
+rev_compl_l[ord('C')] = 'G'
+rev_compl_l[ord('G')] = 'C'
+rev_compl_l[ord('T')] = 'A'
 
+def rev_compl(s):
+    return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
 def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
     trie = Trie(max_error, barcode_length)
 
-    for index, row in tqdm(long_reads.iterrows()):
+    print('Building trie')
+    for index, row in tqdm(long_reads.iterrows(), total=long_reads.shape[0]):
         segment = row["segment"]
-        try:
-            for i in range(len(segment)):
-                if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
-                    trie.insert(segment[i:i + barcode_length + max_error], row["read_id"])
-
-        except:
+        if type(segment)!=str and math.isnan(segment):
             continue
+        for i in range(len(segment)):
+            if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
+                trie.insert(segment[i:i + barcode_length + max_error], row["read_id"])
 
     result = {}
     all_barcode = set()
 
-    for b in selected_barcode:
+    for index, row in selected_barcode.iterrows():
+        b = row['barcode']
         all_barcode.add(b)
-        all_barcode.add(rev(b))
+        all_barcode.add(rev_compl(b))
 
+    print('all_barcode')
     for b in tqdm(all_barcode):
         result[b] = trie.query(b)
 
     full_result = {}
+    print('result')
     for key in tqdm(result):
         for index in result[key]:
             for read_id in result[key][index]:
                 if read_id not in full_result:
-                    full_result[read_id] = {"0": set(), "1": set(), "2": set()}
-
-                full_result[read_id][str(index)].add(key)
-
-     return full_result
+                    full_result[read_id] = [set() for _ in range(max_error+1)]
+                full_result[read_id][int(index)].add(key)
+    return full_result
 
 def main():
     args = parse_args()
@@ -156,7 +172,19 @@ def main():
     long_reads = read_long_reads(args.long_read_segments)
 
     result = run_get_matches(selected_barcode, long_reads, args.max_error, args.barcode_length)
-
+    if args.outfile:
+        outfile = gzip.open(args.outfile, 'wt')
+    else:
+        outfile = sys.stdout
+    for rid in result:
+        outfile.write(f'{rid}')
+        for e in range(args.max_error+1):
+            s = ','.join([str(x) for x in result[rid][e]])
+            if s == '': s = '.'
+            outfile.write(f'\t{s}')
+        outfile.write('\n')
+    outfile.close()
+        
 
 if __name__ == "__main__":
     main()
