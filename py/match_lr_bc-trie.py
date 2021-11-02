@@ -140,7 +140,7 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
             continue
         for i in range(len(segment)):
             if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
-                trie.insert(segment[i:i + barcode_length + max_error], row["read_id"])
+                trie.insert(segment[i:i + barcode_length + max_error], index)
 
     result = {}
     all_barcode = set()
