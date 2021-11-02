@@ -19,41 +19,60 @@ samples:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13035_C1_GSC/
             ../../analysis/scrna/QC/13035_C1_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13035_C1_GSC
     C2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13035_C1_GSC/
             ../../analysis/scrna/QC/13035_C2_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13035_C2_GSC
     D1:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13035_D1_GSC/
             ../../analysis/scrna/QC/13035_D1_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13035_D1_GSC
     D2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13035_D2_GSC/
             ../../analysis/scrna/QC/13035_D2_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13035_D1_GSC
     N1:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13032_N1_GSC/
             ../../analysis/scrna/QC/13032_N1_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13032_N1_GSC
     N2:
         ref: homo_sapiens
         reads:
             - ../../raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
-        sr_bam:
+        sr_fastq:
+            ../../raw-data/scrna/fastq/13032_N2_GSC/
             ../../analysis/scrna/QC/13032_N2_GSC/outs/possorted_genome_bam.bam
+        count_id:
+            13032_N2_GSC
 
 references:
     homo_sapiens:
         annot      : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
         genome     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
         genome_fai : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
+        transcriptome: /groups/hachgrp/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0/

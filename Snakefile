@@ -136,6 +136,18 @@ rule freddie_isoforms:
     shell:
         '{input.script} -s {input.split} -c {input.cluster} -o {output.isoforms} -t {threads}'
 
+rule count:
+    input:
+        fastq=directory(config["samples"]),
+        trans=config["references"]["homo_sapiens"]["transcriptome"],
+        respath=directory(config["outpath"])
+    output:
+        directory("/outs/web_summary.html")
+    params:
+        samples=config[""]
+    shell:
+        "cd {input.respath} && cellranger count --id={params.samples} --transcriptome={input.trans} --fastq={input.fastq} --sample={params.samples}"
+
 rule extract_sr_br:
     input:
         bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
