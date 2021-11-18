@@ -1,0 +1,247 @@
+# import pysam
+# import gzip
+# from tqdm import tqdm
+# from collections import Counter
+
+configfile: 'config.yaml'
+
+for k in config.keys():
+    if not k.startswith('override_'):
+        continue
+    keys = k[len('override_'):].split('_')
+    top_dict = eval('config{}'.format(''.join(['["{}"]'.format(x) for x in keys[:-1]])))
+    assert keys[-1] in top_dict
+    top_dict[keys[-1]]=config[k]
+
+outpath = config['outpath'].rstrip('/')
+clrg_d = f'{outpath}/cellranger-out'
+extr_d = f'{outpath}/extract-out'
+fred_d = f'{outpath}/freddie-out'
+simu_d = f'{outpath}/simulation'
+
+rule all:
+    input:
+        'extern/minnow/build/src/minnow',
+        '{}/salmon_index'.format(simu_d),
+        '{}/minnow_index'.format(simu_d),
+        expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
+        expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
+        # expand('{}/minnow_splatter/{{sample}}/8000-5000-42'.format(simu_d), sample = config['samples']),
+        expand('{}/minnow_simulate/{{sample}}/8000-5000-42'.format(simu_d), sample = config['samples']),
+        # expand('{}/minnow_simulate/{{sample}}/100-150-42'.format(simu_d), sample = config['samples']),
+
+rule make_minnow:
+    input:
+        'extern/minnow'
+    output:
+        'extern/minnow/build/src/minnow'
+    threads:
+        4
+    shell:
+        'mkdir -p extern/minnow/build && '
+        'cd extern/minnow/build && '
+        'cmake -j {threads} -DCMAKE_C_COMPILER=`which gcc` .. && '
+        'make -j {threads}'
+
+rule chr_names:
+    input:
+        dna = config['salmon_refs']['genome'],
+    output:
+        '{}/salmon_index.chrnames.txt'.format(simu_d)
+    shell:
+        'grep ">" {input} | cut -d ">" -f 2 | cut -d " " -f 1 > {output}'
+
+rule salmon_index:
+    input:
+        dna = config['salmon_refs']['genome'],
+        cdna = config['salmon_refs']['transcriptome'],
+        chr_names = '{}/salmon_index.chrnames.txt'.format(simu_d)
+    output:
+        directory('{}/salmon_index'.format(simu_d))
+    conda:
+        'envs/simulate.yml'
+    threads:
+        64
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'salmon index '
+        ' -t <(cat {input.cdna} {input.dna}) '
+        ' -i {output} '
+        ' -p {threads} '
+        '  --gencode '
+        ' -d {input.chr_names} '
+
+rule tid_to_gid:
+    input:
+        config['salmon_refs']['annot']
+    output:
+        '{}/salmon_tx2gene.tsv'.format(simu_d)
+    shell:
+        'cat {input} '
+        ' | awk -F "\\t" \'$3 == "transcript" {{print $9}}\''
+        ' | tr -d ";\\"" ' 
+        ' | awk \'{{for (i=1;i<=NF;i+=2) x[$i]=$(i+1); print x["transcript_id"]"\\t"x["gene_id"]}}\' > {output}'
+
+rule salmon_alevin:
+    input:
+        r1 = lambda wildcards: config['samples'][wildcards.sample]['sr_reads']['R1'],
+        r2 = lambda wildcards: config['samples'][wildcards.sample]['sr_reads']['R2'],
+        i1 = lambda wildcards: config['samples'][wildcards.sample]['sr_reads']['I1'],
+        tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
+        index = '{}/salmon_index'.format(simu_d),
+    output:
+        directory('{}/salmon_alevin/{{sample}}'.format(simu_d))
+    conda:
+        'envs/simulate.yml'
+    threads:
+        100
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'salmon alevin '
+        ' -l ISR '
+        ' -1 {input.r1} '
+        ' -2 {input.r2} '
+        ' -i {input.index} '
+        ' --tgMap {input.tgMap} '
+        ' -p {threads} '
+        ' -o {output} '
+        ' --chromiumV3 '
+        ' --dumpFeatures '
+        ' --expectCells 5000 '
+        ' --dumpBfh '
+
+rule minnow_index:
+    input:
+        cdna = config['salmon_refs']['transcriptome'],
+        index = '{}/salmon_index'.format(simu_d),
+    output:
+        directory('{}/minnow_index'.format(simu_d))
+    conda:
+        'envs/simulate.yml'
+    threads:
+        64
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'extern/minnow/build/src/minnow index'
+        ' -r {input.cdna} '
+        ' -k 101 '
+        ' -f 20'
+        ' -o {output} '
+        ' --tmpdir {output}_temp '
+        ' -p {threads} '
+
+rule minnow_estimate:
+    input:
+        alevin_dir = '{}/salmon_alevin/{{sample}}'.format(simu_d),
+        tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
+        cdna = config['salmon_refs']['transcriptome'],
+    output:
+        directory('{}/minnow_estimate/{{sample}}'.format(simu_d))
+    conda:
+        'envs/simulate.yml'
+    threads:
+        100
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'extern/minnow/build/src/minnow estimate '
+        ' --bfh {input.alevin_dir}/alevin/bfh.txt '
+        ' -r {input.cdna} '
+        ' --g2t {input.tgMap} '
+        ' -o {output} '
+        ' -p {threads} '
+
+
+rule minnow_splatter:
+    input:
+        index = '{}/minnow_index'.format(simu_d),
+    output:
+        directory('{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d)),
+    conda:
+        'envs/simulate.yml'
+    shell:
+        'R/minnow_splatter.R '
+        ' {output} '
+        ' {wildcards.num_genes} '
+        ' {wildcards.num_cells}'
+        ' {wildcards.seed} && '
+        'grep ">" {input.index}/ref_k101_fixed.fa '
+        ' | awk -F "|" \'{{print $2}}\' '
+        ' | shuf -n {wildcards.num_genes} --random-source=<(cat <(echo {wildcards.seed}) {input.index}/ref_k101_fixed.fa)'
+        ' > {output}/quants_mat_rows.txt'
+
+
+rule minnow_simulate:
+    input:
+        splatter = '{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
+        tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
+        index = '{}/minnow_index'.format(simu_d),
+        estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
+        whitelist = config['salmon_refs']['whitelist'],
+    output:
+        directory('{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d))
+    threads:
+        100
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    params:
+        pcr = 4,
+        err = 0.01,
+    shell:
+        'extern/minnow/build/src/minnow simulate --splatter-mode '
+        ' --inputdir {input.splatter} '
+        ' -r {input.index}/ref_k101_fixed.fa '
+        ' --g2t {input.tgMap} '
+        ' --PCR {params.pcr} '
+        ' -e {params.err} '
+        ' -p {threads} '
+        ' -o {output} '
+        ' --dbg '
+        ' --gfa {input.index}/dbg.gfa '
+        ' -w {input.whitelist} '
+        ' --countProb {input.estimate}/countProb.txt '
+        ' --custom '
+        ' --gencode' 
+
+
+# rule minnow_simulate:
+#     input:
+#         splatter = '{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
+#         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
+#         index = '{}/minnow_index'.format(simu_d),
+#         estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
+#         whitelist = config['salmon_refs']['whitelist'],
+#     output:
+#         directory('{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d))
+#     threads:
+#         100
+#     resources:
+#         mem  = "512G",
+#         time = 60*6-1,
+#     params:
+#         pcr = 4,
+#         err = 0.01,
+#     shell:
+#         'extern/minnow/build/src/minnow simulate --splatter-mode '
+#         ' --inputdir {input.splatter} '
+#         ' -r {input.index}/ref_k101_fixed.fa '
+#         ' --g2t {input.tgMap} '
+#         ' --PCR {params.pcr} '
+#         ' -e {params.err} '
+#         ' -p {threads} '
+#         ' -o {output} '
+#         ' --dbg '
+#         ' --gfa {input.index}/dbg.gfa '
+#         ' -w {input.whitelist} '
+#         ' --countProb {input.estimate}/countProb.txt '
+#         ' --custom '
+#         ' --gencode' 
+
