@@ -21,27 +21,23 @@ simu_d = f'{outpath}/simulation'
 
 rule all:
     input:
-        'extern/minnow/build/src/minnow',
         '{}/salmon_index'.format(simu_d),
         '{}/minnow_index'.format(simu_d),
         expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
         expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
-        # expand('{}/minnow_splatter/{{sample}}/8000-5000-42'.format(simu_d), sample = config['samples']),
+        expand('{}/minnow_splatter/{{sample}}/8000-5000-42'.format(simu_d), sample = config['samples']),
         expand('{}/minnow_simulate/{{sample}}/8000-5000-42'.format(simu_d), sample = config['samples']),
-        # expand('{}/minnow_simulate/{{sample}}/100-150-42'.format(simu_d), sample = config['samples']),
+        expand('{}/minnow_simulate/{{sample}}/100-150-42'.format(simu_d), sample = config['samples']),
+        'extern/3M-february-2018.txt'
 
-rule make_minnow:
-    input:
-        'extern/minnow'
+rule wget_whitelist:
     output:
-        'extern/minnow/build/src/minnow'
-    threads:
-        4
+        'extern/3M-february-2018.txt'
+    params:
+        url = 'https://github.com/10XGenomics/cellranger/raw/master/lib/python/cellranger/barcodes/3M-february-2018.txt.gz'
     shell:
-        'mkdir -p extern/minnow/build && '
-        'cd extern/minnow/build && '
-        'cmake -j {threads} -DCMAKE_C_COMPILER=`which gcc` .. && '
-        'make -j {threads}'
+        'wget {params.url} -O {output}.gz && gunzip {output}.gz'
+
 
 rule chr_names:
     input:
@@ -128,7 +124,7 @@ rule minnow_index:
         mem  = "512G",
         time = 60*6-1,
     shell:
-        'extern/minnow/build/src/minnow index'
+        'minnow index'
         ' -r {input.cdna} '
         ' -k 101 '
         ' -f 20'
@@ -151,7 +147,7 @@ rule minnow_estimate:
         mem  = "512G",
         time = 60*6-1,
     shell:
-        'extern/minnow/build/src/minnow estimate '
+        'minnow estimate '
         ' --bfh {input.alevin_dir}/alevin/bfh.txt '
         ' -r {input.cdna} '
         ' --g2t {input.tgMap} '
@@ -184,7 +180,7 @@ rule minnow_simulate:
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
         index = '{}/minnow_index'.format(simu_d),
         estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
-        whitelist = config['salmon_refs']['whitelist'],
+        whitelist = 'extern/3M-february-2018.txt',
     output:
         directory('{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d))
     threads:
@@ -196,7 +192,7 @@ rule minnow_simulate:
         pcr = 4,
         err = 0.01,
     shell:
-        'extern/minnow/build/src/minnow simulate --splatter-mode '
+        'minnow simulate --splatter-mode '
         ' --inputdir {input.splatter} '
         ' -r {input.index}/ref_k101_fixed.fa '
         ' --g2t {input.tgMap} '
@@ -218,7 +214,7 @@ rule minnow_simulate:
 #         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
 #         index = '{}/minnow_index'.format(simu_d),
 #         estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
-#         whitelist = config['salmon_refs']['whitelist'],
+#         whitelist = 'extern/3M-february-2018.txt',
 #     output:
 #         directory('{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d))
 #     threads:
@@ -230,7 +226,7 @@ rule minnow_simulate:
 #         pcr = 4,
 #         err = 0.01,
 #     shell:
-#         'extern/minnow/build/src/minnow simulate --splatter-mode '
+#         'minnow simulate --splatter-mode '
 #         ' --inputdir {input.splatter} '
 #         ' -r {input.index}/ref_k101_fixed.fa '
 #         ' --g2t {input.tgMap} '

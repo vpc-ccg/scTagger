@@ -15,46 +15,71 @@ exec:
         segment  : extern/freddie/py/freddie_segment.py
         cluster  : extern/freddie/py/freddie_cluster.py
         isoforms : extern/freddie/py/freddie_isoforms.py
+
 samples:
     C1:
         ref: homo_sapiens
         reads:
-            - ../../raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13035_C1_GSC/outs/possorted_genome_bam.bam
-    C2:
-        ref: homo_sapiens
-        reads:
-            - ../../raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13035_C2_GSC/outs/possorted_genome_bam.bam
-    D1:
-        ref: homo_sapiens
-        reads:
-            - ../../raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13035_D1_GSC/outs/possorted_genome_bam.bam
-    D2:
-        ref: homo_sapiens
-        reads:
-            - ../../raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13035_D2_GSC/outs/possorted_genome_bam.bam
-    N1:
-        ref: homo_sapiens
-        reads:
-            - ../../raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13032_N1_GSC/outs/possorted_genome_bam.bam
-    N2:
-        ref: homo_sapiens
-        reads:
-            - ../../raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
-        sr_bam:
-            ../../analysis/scrna/QC/13032_N2_GSC/outs/possorted_genome_bam.bam
+            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
+        sr_fastq_dir:
+            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC
+        sr_fastq_prefix:
+            13035_C1
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R2_001.fastq.gz
+            I1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_I1_001.fastq.gz
+    # C2:
+    #     ref: homo_sapiens
+    #     reads:
+    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
+    #     sr_fastq_dir:
+    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC
+    #     sr_fastq_prefix:
+    #         13035_C2
+    # D1:
+    #     ref: homo_sapiens
+    #     reads:
+    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
+    #     sr_fastq_dir:
+    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC
+    #     sr_fastq_prefix:
+    #         13035_D1
+    # D2:
+    #     ref: homo_sapiens
+    #     reads:
+    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
+    #     sr_fastq_dir:
+    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC
+    #     sr_fastq_prefix:
+    #         13035_D2
+    # N1:
+    #     ref: homo_sapiens
+    #     reads:
+    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
+    #     sr_fastq_dir:
+    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC
+    #     sr_fastq_prefix:
+    #         13032_N1
+    # N2:
+    #     ref: homo_sapiens
+    #     reads:
+    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
+    #     sr_fastq_dir:
+    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC
+    #     sr_fastq_prefix:
+    #         13032_N2
 
 references:
     homo_sapiens:
-        annot      : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
-        genome     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
-        genome_fai : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
+        annot          : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
+        transcriptome  : /groups/hachgrp/annotations/cDNA/97/Homo_sapiens.GRCh38.cdna.all.fa
+        genome         : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+        genome_fai     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
+        cellranger_ref : /groups/hachgrp/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
+
+salmon_refs:
+    annot          : /groups/hachgrp/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
+    transcriptome  : /groups/hachgrp/annotations/cDNA/GENCODE/38/human.gencode.v38.pc_transcripts.fa
+    genome         : /groups/hachgrp/annotations/DNA/GENCODE/38/human.GRCh38.primary_assembly.genome.fa
+    whitelist      : extern/3M-february-2018.txt
