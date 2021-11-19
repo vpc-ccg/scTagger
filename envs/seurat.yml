@@ -1,0 +1,7 @@
+name: r-seurat
+channels:
+  - bioconda
+  - conda-forge
+  - r
+dependencies:
+  - r-seurat == 4.0.5

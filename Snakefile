@@ -14,11 +14,16 @@ for k in config.keys():
     top_dict[keys[-1]]=config[k]
 
 outpath = config['outpath'].rstrip('/')
+clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
+seurat_d = f'{outpath}/seurat-out'
 
 rule all:
     input:
+        expand('{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
@@ -28,6 +33,7 @@ rule all:
         expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
+        expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule extract_lr_br:
     input:
@@ -136,21 +142,11 @@ rule freddie_isoforms:
     shell:
         '{input.script} -s {input.split} -c {input.cluster} -o {output.isoforms} -t {threads}'
 
-rule count:
-    input:
-        fastq=directory(config["samples"]),
-        trans=config["references"]["homo_sapiens"]["transcriptome"],
-        respath=directory(config["outpath"])
-    output:
-        directory("/outs/web_summary.html")
-    params:
-        samples=config[""]
-    shell:
-        "cd {input.respath} && cellranger count --id={params.samples} --transcriptome={input.trans} --fastq={input.fastq} --sample={params.samples}"
 
 rule extract_sr_br:
     input:
-        bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
+        bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+        # bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -216,3 +212,90 @@ rule match_aln:
         time = 60*6-1,
     shell:
         '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -t {threads} -o {output.lr_tsv}'
+
+rule match_trie:
+    input:
+        script  = config['exec']['match_trie'],
+        lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
+        sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    output:
+        lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
+    threads:
+        1
+    resources:
+        mem  = "128G",
+        time = 60*5-1,
+    shell:
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'        
+
+
+rule validate_trie:
+    input:
+        lr_aln_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
+        lr_trie_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d),
+    output:
+        check = '{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.tsv.gz'.format(extr_d),
+    threads:
+        1
+    resources:
+        mem  = "250G",
+        time = 60*6-1,
+    run:
+        lr = dict()
+        for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
+            l = l.rstrip('\n').split('\t')
+            rid = l[0]
+            aln_matches = tuple(sorted(l[4].split(',')))
+            assert not rid in lr, rid
+            lr[rid] = [aln_matches]
+        for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
+            l = l.rstrip('\n').split('\t')
+            rid = l[0]
+            for trie_matches in l[1:]:
+                if trie_matches=='.':
+                    continue
+                assert len(lr[rid])==1, rid
+                trie_matches = tuple(sorted(trie_matches.split(',')))
+                lr[rid].append(trie_matches)
+                break             
+        for am,tm in lr.values():
+            assert am==tm
+        
+
+rule cell_ranger_count:
+    input:
+        sr_fastq_dir = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_dir'],
+        ref = lambda wildcards: config['references'][config['samples'][wildcards.sample]['ref']]['cellranger_ref'],
+    output:
+        # directory("outs/web_summary.html"),
+        bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+    params:
+        outdir = '{}/{{sample}}'.format(clrg_d),
+        sample_prefix = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_prefix'],
+        mem_gb = 512
+    threads:
+        32
+    resources:
+        mem  = '512G',
+        time = 60*12-1,
+    shell:
+        'mkdir -p {params.outdir} && cd {params.outdir} && '
+        '  cellranger count '
+        ' --id={wildcards.sample}'
+        ' --transcriptome={input.ref}'
+        ' --fastq={input.sr_fastq_dir}'
+        ' --sample={params.sample_prefix}'
+        ' --localcores {threads}'        
+        ' --localmem {params.mem_gb}'
+
+
+rule seurat:
+    input:
+        config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
+        script = config['exec']['seurat']['preprocessing'],
+        input_path = '{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
+    output:
+        out_path = protected('{}/{{sample}}/'.format(seurat_d)),
+    shell:
+        'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}'
+
