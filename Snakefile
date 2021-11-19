@@ -17,6 +17,7 @@ outpath = config['outpath'].rstrip('/')
 clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
+seurat_d = f'{outpath}/seurat-out'
 
 rule all:
     input:
@@ -32,6 +33,7 @@ rule all:
         expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
+        expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule extract_lr_br:
     input:
@@ -139,6 +141,7 @@ rule freddie_isoforms:
         time = 359,
     shell:
         '{input.script} -s {input.split} -c {input.cluster} -o {output.isoforms} -t {threads}'
+
 
 rule extract_sr_br:
     input:
@@ -284,3 +287,15 @@ rule cell_ranger_count:
         ' --sample={params.sample_prefix}'
         ' --localcores {threads}'        
         ' --localmem {params.mem_gb}'
+
+
+rule seurat:
+    input:
+        config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
+        script = config['exec']['seurat']['preprocessing'],
+        input_path = '{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
+    output:
+        out_path = protected('{}/{{sample}}/'.format(seurat_d)),
+    shell:
+        'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}'
+
