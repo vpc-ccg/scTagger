@@ -2,8 +2,8 @@ library(yaml)
 library(Seurat)
 library(DoubletFinder)
 
-source("functions/preprocessing.R")
-source("functions/clustering.R")
+source("R/functions/preprocessing.R")
+source("R/functions/clustering.R")
 
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -17,7 +17,8 @@ preprocessingRes <- preprocessing(inputPath=inputPath, doVlnPlot=config$doVlnPlo
                                   nFeatuerRNAMax=config$nFeatuerRNAMax,
                                   nFeatuerRNAMin=config$nFeatuerRNAMin, doSave=config$preDoSave,
                                   project=config$project, nCellMin=config$nCellMin,
-                                  vlnPltName=config$vlnPltName, dataName=config$preDataName)
+                                  vlnPltName=paste(resultPath,config$vlnPltName,sep='/'),
+                                  dataName=paste(resultPath,config$preDataName,sep='/'))
 
 clusteringRes <- clustering(preprocessingRes$data, doEblowPlot=config$doEblowPlot,
                             maxDim=config$maxDim, doUMAP=config$doUMAP, doSave=config$doSave,

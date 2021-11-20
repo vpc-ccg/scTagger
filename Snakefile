@@ -14,6 +14,7 @@ for k in config.keys():
     top_dict[keys[-1]]=config[k]
 
 outpath = config['outpath'].rstrip('/')
+bnch_d = f'{outpath}/benchmark-out'
 clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
@@ -33,12 +34,14 @@ rule all:
         expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
         expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
-        expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
+        # expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule extract_lr_br:
     input:
         script = config['exec']['split'],
         reads = lambda wildcards: config['samples'][wildcards.sample]['reads'],
+    benchmark:
+        '{}/extract_lr_br/{{sample}}.txt'.format(bnch_d)
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -147,6 +150,8 @@ rule extract_sr_br:
     input:
         bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
         # bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
+    benchmark:
+        '{}/extract_sr_br/{{sample}}.txt'.format(bnch_d)
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -172,6 +177,8 @@ rule get_top_sr_br:
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
+    benchmark:
+        '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
     threads:
         1
     resources:
@@ -203,6 +210,8 @@ rule match_aln:
         script  = config['exec']['match_aln'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    benchmark:
+        '{}/match_aln/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d)),
     threads:
@@ -218,6 +227,8 @@ rule match_trie:
         script  = config['exec']['match_trie'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    benchmark:
+        '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
     threads:
@@ -269,6 +280,7 @@ rule cell_ranger_count:
     output:
         # directory("outs/web_summary.html"),
         bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+        matrix = directory('{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d)),
     params:
         outdir = '{}/{{sample}}'.format(clrg_d),
         sample_prefix = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_prefix'],
@@ -278,6 +290,8 @@ rule cell_ranger_count:
     resources:
         mem  = '512G',
         time = 60*12-1,
+    benchmark:
+        '{}/cell_ranger_count/{{sample}}.txt'.format(bnch_d)
     shell:
         'mkdir -p {params.outdir} && cd {params.outdir} && '
         '  cellranger count '
@@ -288,7 +302,6 @@ rule cell_ranger_count:
         ' --localcores {threads}'        
         ' --localmem {params.mem_gb}'
 
-
 rule seurat:
     input:
         config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
@@ -296,6 +309,8 @@ rule seurat:
         input_path = '{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
     output:
         out_path = protected('{}/{{sample}}/'.format(seurat_d)),
+    benchmark:
+        '{}/seurat/{{sample}}.txt'.format(bnch_d)
     shell:
-        'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}'
+        'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}/'
 
