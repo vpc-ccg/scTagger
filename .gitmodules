@@ -1,3 +1,6 @@
 [submodule "extern/freddie"]
 	path = extern/freddie
 	url = https://github.com/vpc-ccg/freddie/
+[submodule "extern/minnow"]
+	path = extern/minnow
+	url = https://github.com/COMBINE-lab/minnow
