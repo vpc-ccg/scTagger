@@ -3,6 +3,7 @@ import sys
 import argparse
 from multiprocessing import Pool
 import gzip
+import edlib 
 
 from tqdm import tqdm
 

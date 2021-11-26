@@ -1,4 +1,10 @@
+import random
 import re
+import gzip
+import pickle
+
+import pyfasta
+
 configfile: 'config.yaml'
 
 for k in config.keys():
@@ -17,19 +23,38 @@ simu_d = f'{outpath}/simulation'
 
 rule all:
     input:
+        'extern/minnow/build/src/minnow',
+        'extern/3M-february-2018.txt',
         '{}/salmon_index'.format(simu_d),
+        '{}/minnow_index'.format(simu_d),
         expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
         expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
-        expand('{}/minnow_simulate_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
-        'extern/3M-february-2018.txt',
+        expand('{}/minnow_simulate/{{sample}}/200-100-42'.format(simu_d), sample = config['samples']),
+        expand('{}/lr_simulate/{{sample}}/200-100-42/mols.tsv'.format(simu_d), sample = config['samples']),
+        # expand('{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d), sample = config['samples']),
+        # expand('{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d), sample = config['samples']),
+
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
+
+rule make_minnow:
+    input:
+        'extern/minnow'
+    output:
+        'extern/minnow/build/src/minnow'
+    threads:
+        4
+    shell:
+        'mkdir -p extern/minnow/build && '
+        'cd extern/minnow/build && '
+        'cmake -j {threads} -DCMAKE_C_COMPILER=`which gcc` .. && '
+        'make -j {threads}'
 
 rule wget_whitelist:
     output:
         'extern/3M-february-2018.txt'
     params:
-        url = 'https://github.com/10XGenomics/cellranger/raw/master/lib/python/cellranger/barcodes/3M-february-2018.txt.gz'
+        url = 'https://github.com/10XGenomics/cellranger/blob/5f5a6293bbc067e1965e50f0277286914b96c908/lib/python/cellranger/barcodes/3M-february-2018.txt.gz'
     shell:
         'wget {params.url} -O - | zcat > {output}'
 
@@ -81,13 +106,13 @@ rule salmon_alevin:
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
         index = '{}/salmon_index'.format(simu_d),
     params:
-        cc = lambda wildcards: config['samples'][wildcards.sample]['sr_reads']['cell_count'],
+        cc = lambda wildcards: config['samples'][wildcards.sample]['cell_count'],
     output:
         directory('{}/salmon_alevin/{{sample}}'.format(simu_d)),
     conda:
         'envs/simulate.yml'
     threads:
-        100
+        64
     resources:
         mem  = "512G",
         time = 60*6-1,
@@ -102,38 +127,85 @@ rule salmon_alevin:
         ' -o {output} '
         ' --chromiumV3 '
         ' --dumpFeatures '
-        ' --expectCells {params.cell_count} '
+        ' --expectCells {params.cc} '
         ' --dumpBfh '
 
-# rule minnow_splatter:
-#     input:
-#         index = '{}/minnow_index'.format(simu_d),
-#     output:
-#         directory('{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d)),
-#     conda:
-#         'envs/simulate.yml'
-#     shell:
-#         'R/minnow_splatter.R '
-#         ' {output} '
-#         ' {wildcards.num_genes} '
-#         ' {wildcards.num_cells}'
-#         ' {wildcards.seed} && '
-#         'grep ">" {input.index}/ref_k101_fixed.fa '
-#         ' | awk -F "|" \'{{print $2}}\' '
-#         ' | shuf -n {wildcards.num_genes} --random-source=<(cat <(echo {wildcards.seed}) {input.index}/ref_k101_fixed.fa)'
-#         ' > {output}/quants_mat_rows.txt'
-
-rule minnow_simulate_alevin:
+rule minnow_index:
     input:
-        alevin = '{}/salmon_alevin/{{sample}}'.format(simu_d),
+        cdna = config['salmon_refs']['transcriptome'],
+        index = '{}/salmon_index'.format(simu_d),
+    output:
+        directory('{}/minnow_index'.format(simu_d))
+    # conda:
+    #     'envs/simulate.yml'
+    threads:
+        64
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'extern/minnow/build/src/minnow index'
+        ' -r {input.cdna} '
+        ' -k 101 '
+        ' -f 20'
+        ' -o {output} '
+        ' --tmpdir {output}_temp '
+        ' -p {threads} '
+
+rule minnow_estimate:
+    input:
+        alevin_dir = '{}/salmon_alevin/{{sample}}'.format(simu_d),
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
         cdna = config['salmon_refs']['transcriptome'],
     output:
-        directory('{}/minnow_simulate_alevin/{{sample}}'.format(simu_d)),
+        directory('{}/minnow_estimate/{{sample}}'.format(simu_d))
+    # conda:
+    #     'envs/simulate.yml'
+    threads:
+        64
+    resources:
+        mem  = "512G",
+        time = 60*6-1,
+    shell:
+        'extern/minnow/build/src/minnow estimate '
+        ' --bfh {input.alevin_dir}/alevin/bfh.txt '
+        ' -r {input.cdna} '
+        ' --g2t {input.tgMap} '
+        ' -o {output} '
+        ' -p {threads} '
+
+
+rule minnow_splatter:
+    input:
+        index = '{}/minnow_index'.format(simu_d),
+    output:
+        directory('{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d)),
     conda:
         'envs/simulate.yml'
+    shell:
+        'R/minnow_splatter.R '
+        ' {output} '
+        ' {wildcards.num_genes} '
+        ' {wildcards.num_cells}'
+        ' {wildcards.seed} && '
+        'grep ">" {input.index}/ref_k101_fixed.fa '
+        ' | awk -F "|" \'{{print $2}}\' '
+        ' | shuf -n {wildcards.num_genes} --random-source=<(cat <(echo {wildcards.seed}) {input.index}/ref_k101_fixed.fa)'
+        ' > {output}/quants_mat_rows.txt'
+
+
+rule minnow_simulate:
+    input:
+        splatter = '{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
+        tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
+        index = '{}/minnow_index'.format(simu_d),
+        estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
+        whitelist = config['salmon_refs']['whitelist'],
+    output:
+        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
     threads:
-        100
+        64
     resources:
         mem  = "512G",
         time = 60*6-1,
@@ -141,13 +213,102 @@ rule minnow_simulate_alevin:
         pcr = 4,
         err = 0.01,
     shell:
-        # 'minnow --help && '
-        'minnow simulate --alevin-mode '
-        ' --binary '
+        'extern/minnow/build/src/minnow simulate --splatter-mode '
+        ' --inputdir {input.splatter} '
+        ' -r {input.index}/ref_k101_fixed.fa '
         ' --g2t {input.tgMap} '
-        ' -m {input.alevin}/alevin '
-        ' -r {input.cdna} '
         ' --PCR {params.pcr} '
         ' -e {params.err} '
         ' -p {threads} '
         ' -o {output} '
+        ' --dbg '
+        ' --gfa {input.index}/dbg.gfa '
+        ' -w {input.whitelist} '
+        ' --countProb {input.estimate}/countProb.txt '
+        ' --custom '
+        ' --gencode' 
+
+rule pickle_annot:
+    input:
+        gtf = config['salmon_refs']['annot'],
+    output:
+        pkl = f'{simu_d}/gtf.pkl'
+    run:
+        print('Reading GTF')
+        tids = dict()
+        for l in open(input.gtf):
+            if l[0]=='#':
+                continue
+            l = l.rstrip().split('\t')
+            if l[2]!='exon':
+                continue
+            info = l[8]
+            info = [x.strip().split(' ') for x in info.strip(';').split(';')]
+            info = {x[0]:x[1].strip('"') for x in info}
+            contig = l[0]
+            tid = info['transcript_id']
+            if not tid in tids:
+                tids[tid] = dict(contig=l[0], gene_id=info['gene_id'], exons=list(), strand=l[6])
+            tids[tid]['exons'].append((
+                int(l[3])-1,
+                int(l[4]),
+            ))
+        pickle.dump(tids, open(output.pkl, 'wb+'))
+
+rule lr_reference:
+    input:
+        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        pkl = f'{simu_d}/gtf.pkl'
+    output:
+        mols_tsv = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
+        cbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
+        mbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+    params:
+        c = 100_000
+    run:
+        print('Reading GTF pickle')
+        tids = pickle.load(open(input.pkl, 'rb'))
+        print('Reading simulated SRs')
+        cbs = dict()
+        mbs = dict()
+        mols_tsv = open(output.mols_tsv, 'w+')
+        cbs_fa = open(output.cbs_fa, 'w+')
+        mbs_fa = open(output.mbs_fa, 'w+')
+
+        print('Outputting a random sample of molecules')
+        r1 = [l.split()[0].strip('@ \n') for l in gzip.open(input.r1, 'rt') if l.startswith('@')]
+        for mid,l in enumerate(random.sample(r1, k=params.c)):
+            l = l.split(':')
+            assert len(l[0]) == 26
+            cb = l[0][:16]
+            mb = l[0][16:]
+            if not cb in cbs:
+                cbs[cb] = len(cbs)
+                cbs_fa.write(f'>cb_{cbs[cb]}\n{cb}\n')
+            if not mb in mbs:
+                mbs[mb] = len(mbs)
+                mbs_fa.write(f'>mb_{mbs[mb]}\n{mb}\n')
+            tid = l[1]
+            contig = tids[tid]['contig']
+            exons = tids[tid]['exons']
+            gene_id = tids[tid]['gene_id']
+            strand = tids[tid]['strand']
+            mols_tsv.write(f'{mid}\t{gene_id}\t{1}\t{3+len(exons)}\n')
+
+            if strand == '+':
+                mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+                mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
+                mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
+                for s,e in exons:
+                    mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
+            else:
+                for s,e in exons:
+                    mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
+                mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
+                mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
+                mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+        cbs_fa.write(f'>polyA\n{"A"*200}\n')
+        mols_tsv.close()
+        cbs_fa.close()
+        mbs_fa.close()
+            

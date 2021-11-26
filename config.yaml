@@ -28,9 +28,10 @@ samples:
         sr_fastq_prefix:
             13035_C1
         sr_reads:
-            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R1_001.fastq.gz
-            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R2_001.fastq.gz
-            I1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_I1_001.fastq.gz
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC/13035_C1_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC/13035_C1_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
     C2:
         ref: homo_sapiens
@@ -40,6 +41,11 @@ samples:
             /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC
         sr_fastq_prefix:
             13035_C2
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC/13035_C2_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC/13035_C2_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
     D1:
         ref: homo_sapiens
@@ -49,6 +55,11 @@ samples:
             /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC
         sr_fastq_prefix:
             13035_D1
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC/13035_D1_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC/13035_D1_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
     D2:
         ref: homo_sapiens
@@ -58,6 +69,11 @@ samples:
             /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC
         sr_fastq_prefix:
             13035_D2
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC/13035_D2_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC/13035_D2_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
     N1:
         ref: homo_sapiens
@@ -67,6 +83,11 @@ samples:
             /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC
         sr_fastq_prefix:
             13032_N1
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
     N2:
         ref: homo_sapiens
@@ -76,6 +97,11 @@ samples:
             /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC
         sr_fastq_prefix:
             13032_N2
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
         seurat_config: config_r_C1.yaml
 
 references:
