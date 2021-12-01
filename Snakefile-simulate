@@ -3,7 +3,7 @@ import re
 import gzip
 import pickle
 
-import pyfasta
+import tqdm
 
 configfile: 'config.yaml'
 
@@ -29,10 +29,16 @@ rule all:
         '{}/minnow_index'.format(simu_d),
         expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
         expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
-        expand('{}/minnow_simulate/{{sample}}/200-100-42'.format(simu_d), sample = config['samples']),
-        expand('{}/lr_simulate/{{sample}}/200-100-42/mols.tsv'.format(simu_d), sample = config['samples']),
-        # expand('{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d), sample = config['samples']),
-        # expand('{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d), sample = config['samples']),
+        expand(
+            '{}/minnow_simulate/{{sample}}/{{gcs}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+            sample = config['samples'],
+            gcs = config['gene_cell_seed'],
+        ),
+        expand(
+            '{}/lr_simulate/{{sample}}/{{gcs}}/mols.tsv'.format(simu_d),
+            sample = config['samples'],
+            gcs = config['gene_cell_seed'],
+        ),
 
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
@@ -174,10 +180,9 @@ rule minnow_estimate:
         ' -o {output} '
         ' -p {threads} '
 
-
 rule minnow_splatter:
     input:
-        index = '{}/minnow_index'.format(simu_d),
+        tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
     output:
         directory('{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d)),
     conda:
@@ -188,9 +193,9 @@ rule minnow_splatter:
         ' {wildcards.num_genes} '
         ' {wildcards.num_cells}'
         ' {wildcards.seed} && '
-        'grep ">" {input.index}/ref_k101_fixed.fa '
-        ' | awk -F "|" \'{{print $2}}\' '
-        ' | shuf -n {wildcards.num_genes} --random-source=<(cat <(echo {wildcards.seed}) {input.index}/ref_k101_fixed.fa)'
+        'cut -f2 {input.tgMap} '
+        ' | sort -u '
+        ' | shuf -n {wildcards.num_genes} --random-source=<(yes {wildcards.seed})'
         ' > {output}/quants_mat_rows.txt'
 
 
@@ -205,11 +210,12 @@ rule minnow_simulate:
         r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
         r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
     threads:
-        64
+        16
     resources:
         mem  = "512G",
         time = 60*6-1,
     params:
+        outpath = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
         pcr = 4,
         err = 0.01,
     shell:
@@ -220,7 +226,7 @@ rule minnow_simulate:
         ' --PCR {params.pcr} '
         ' -e {params.err} '
         ' -p {threads} '
-        ' -o {output} '
+        ' -o {params.outpath} '
         ' --dbg '
         ' --gfa {input.index}/dbg.gfa '
         ' -w {input.whitelist} '
@@ -277,7 +283,7 @@ rule lr_reference:
 
         print('Outputting a random sample of molecules')
         r1 = [l.split()[0].strip('@ \n') for l in gzip.open(input.r1, 'rt') if l.startswith('@')]
-        for mid,l in enumerate(random.sample(r1, k=params.c)):
+        for mid,l in tqdm.tqdm(enumerate(random.sample(r1, k=params.c))):
             l = l.split(':')
             assert len(l[0]) == 26
             cb = l[0][:16]
@@ -293,7 +299,7 @@ rule lr_reference:
             exons = tids[tid]['exons']
             gene_id = tids[tid]['gene_id']
             strand = tids[tid]['strand']
-            mols_tsv.write(f'{mid}\t{gene_id}\t{1}\t{3+len(exons)}\n')
+            mols_tsv.write(f'+{mid}\t{1}\t{3+len(exons)}\t{gene_id}\n')
 
             if strand == '+':
                 mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
