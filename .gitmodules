@@ -4,3 +4,9 @@
 [submodule "extern/minnow"]
 	path = extern/minnow
 	url = https://github.com/COMBINE-lab/minnow
+[submodule "extern/RNAInFuser"]
+	path = extern/RNAInFuser
+	url = https://github.com/f0t1h/RNAInFuser
+[submodule "extern/Badread"]
+	path = extern/Badread
+	url = https://github.com/baraaorabi/Badread

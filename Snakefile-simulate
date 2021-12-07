@@ -35,11 +35,18 @@ rule all:
             gcs = config['gene_cell_seed'],
         ),
         expand(
-            '{}/lr_simulate/{{sample}}/{{gcs}}/mols.tsv'.format(simu_d),
+            '{}/reads/{{sample}}/{{gcs}}/{{f}}'.format(simu_d),
             sample = config['samples'],
             gcs = config['gene_cell_seed'],
-        ),
+            f = [
+                'hg_100_S1_L001_R1_001.fastq.gz',
+                'hg_100_S1_L001_R2_001.fastq.gz',
+                'mols.tsv',
+                'cbs.fa',
+                'mbs.fa',
 
+            ]
+        ),
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
 
@@ -210,7 +217,7 @@ rule minnow_simulate:
         r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
         r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
     threads:
-        16
+        64
     resources:
         mem  = "512G",
         time = 60*6-1,
@@ -261,17 +268,41 @@ rule pickle_annot:
             ))
         pickle.dump(tids, open(output.pkl, 'wb+'))
 
-rule lr_reference:
+rule count_reads:
     input:
         r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+    output:
+        wc = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
+    shell:
+        'zcat {input} | wc -l | awk \'{{print $1/4}}\' > {output}'
+
+rule split_minnow_output:
+    input:
+        wc = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
+        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
         pkl = f'{simu_d}/gtf.pkl'
     output:
-        mols_tsv = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
-        cbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
-        mbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+        r1_fq    = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2_fq    = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
+        mols_tsv = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
     params:
-        c = 100_000
+        lr_cnt = 100_000,
+        sr_cnt = 1_000_000,
     run:
+        minnow_cnt = int(open(input.wc).read())
+        print(f'Minnow sim count: {minnow_cnt}')
+        if minnow_cnt < params.lr_cnt + params.sr_cnt:
+            minnow_cnt = params.lr_cnt + params.sr_cnt
+        P_l = params.lr_cnt/(minnow_cnt)
+        P_s = params.sr_cnt/(minnow_cnt)
+        print(f'SR count: {params.sr_cnt}')
+        print(f'LR count: {params.lr_cnt}')
+        print(f'SR probability: {P_s}')
+        print(f'LR probability: {P_l}')
+
         print('Reading GTF pickle')
         tids = pickle.load(open(input.pkl, 'rb'))
         print('Reading simulated SRs')
@@ -280,41 +311,76 @@ rule lr_reference:
         mols_tsv = open(output.mols_tsv, 'w+')
         cbs_fa = open(output.cbs_fa, 'w+')
         mbs_fa = open(output.mbs_fa, 'w+')
+        r1_fq = open(output.r1_fq, 'w+')
+        r2_fq = open(output.r2_fq, 'w+')
 
         print('Outputting a random sample of molecules')
-        r1 = [l.split()[0].strip('@ \n') for l in gzip.open(input.r1, 'rt') if l.startswith('@')]
-        for mid,l in tqdm.tqdm(enumerate(random.sample(r1, k=params.c))):
-            l = l.split(':')
-            assert len(l[0]) == 26
-            cb = l[0][:16]
-            mb = l[0][16:]
-            if not cb in cbs:
-                cbs[cb] = len(cbs)
-                cbs_fa.write(f'>cb_{cbs[cb]}\n{cb}\n')
-            if not mb in mbs:
-                mbs[mb] = len(mbs)
-                mbs_fa.write(f'>mb_{mbs[mb]}\n{mb}\n')
-            tid = l[1]
-            contig = tids[tid]['contig']
-            exons = tids[tid]['exons']
-            gene_id = tids[tid]['gene_id']
-            strand = tids[tid]['strand']
-            mols_tsv.write(f'+{mid}\t{1}\t{3+len(exons)}\t{gene_id}\n')
-
-            if strand == '+':
-                mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
-                mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
-                mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
-                for s,e in exons:
-                    mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
-            else:
-                for s,e in exons:
-                    mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
-                mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
-                mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
-                mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+        random.seed(int(wildcards.seed))
+        print(f'Seed: {int(wildcards.seed)}')
+        mid = 0
+        with gzip.open(input.r1, 'rt') as f1, gzip.open(input.r2, 'rt') as f2:
+            for _ in  tqdm.tqdm(range(minnow_cnt*4)):
+                l1 = f1.readline()
+                l2 = f2.readline()
+                if len(l1) == 0 or len(l2) == 0:
+                    break
+                if not l1.startswith('@'):
+                    continue
+                R = random.random()
+                if R < P_l:
+                    l1 = l1.split()[0].strip('@ \n').split(':')
+                    assert len(l1[0]) == 26
+                    cb = l1[0][:16]
+                    mb = l1[0][16:]
+                    if not cb in cbs:
+                        cbs[cb] = len(cbs)
+                        cbs_fa.write(f'>cb_{cbs[cb]}\n{cb}\n')
+                    if not mb in mbs:
+                        mbs[mb] = len(mbs)
+                        mbs_fa.write(f'>mb_{mbs[mb]}\n{mb}\n')
+                    tid = l1[1]
+                    contig = tids[tid]['contig']
+                    exons = tids[tid]['exons']
+                    gene_id = tids[tid]['gene_id']
+                    strand = tids[tid]['strand']
+                    mols_tsv.write(f'+{mid}\t{1}\t{3+len(exons)}\t{gene_id}\n')
+                    if strand == '+':
+                        mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+                        mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
+                        mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
+                        for s,e in exons:
+                            mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
+                    else:
+                        for s,e in exons:
+                            mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
+                        mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
+                        mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
+                        mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+                    mid += 1
+                elif P_l < R < P_l + P_s:
+                    r1_fq.write(l1)
+                    r2_fq.write(l2)
+                    for _ in range(3):
+                        l1 = f1.readline()
+                        r1_fq.write(l1)
+                        l2 = f2.readline()
+                        r2_fq.write(l2)
+                else:
+                    continue
         cbs_fa.write(f'>polyA\n{"A"*200}\n')
         mols_tsv.close()
         cbs_fa.close()
         mbs_fa.close()
+        r1_fq.close()
+        r2_fq.close()
             
+
+rule pcr:
+    input:
+        mols_tsv = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
+        cbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
+        mbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+    output:
+        pcr_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.fa'.format(simu_d),
+    shell:
+        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_fa} --fastq'
