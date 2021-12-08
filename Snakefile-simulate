@@ -44,9 +44,12 @@ rule all:
                 'mols.tsv',
                 'cbs.fa',
                 'mbs.fa',
-
+                'pcr.tsv',
+                'long-reads.fastq',
             ]
         ),
+        # lr_fq  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads.fastq'.format(simu_d),
+
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
 
@@ -377,10 +380,37 @@ rule split_minnow_output:
 
 rule pcr:
     input:
-        mols_tsv = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
-        cbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
-        mbs_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+        mols_tsv = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
     output:
-        pcr_fa = '{}/lr_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.fa'.format(simu_d),
+        pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
     shell:
-        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_fa} --fastq'
+        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_tsv} '
+
+rule sequence:
+    input:
+        pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+        dna_fa   = config['salmon_refs']['genome'],
+    output:
+        lr_fq  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads.fastq'.format(simu_d),
+    threads:
+        64
+    params:
+        badread  = 'extern/Badread/badread-runner.py',
+        tmp  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads_temp'.format(simu_d),
+    shell:
+        'mkdir -p {params.tmp} && '
+        './extern/RNAInFuser/build/sequencer '
+        ' -m {input.pcr_tsv}'
+        ' -r {input.cbs_fa},{input.mbs_fa},{input.dna_fa}'
+        ' -o {output.lr_fq}' 
+        ' --badread {params.badread}'
+        ' -t {threads}'
+        ' --temp {params.tmp}'
+        ' --seed {wildcards.seed} &&'
+        'rm -r {params.tmp}'
+
+
