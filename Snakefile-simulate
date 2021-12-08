@@ -292,7 +292,7 @@ rule split_minnow_output:
         cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
         mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
     params:
-        lr_cnt = 100_000,
+        lr_cnt = 1_000,
         sr_cnt = 1_000_000,
     run:
         minnow_cnt = int(open(input.wc).read())
@@ -386,7 +386,7 @@ rule pcr:
     output:
         pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
     shell:
-        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_tsv} '
+        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_tsv} --cycles 3'
 
 rule sequence:
     input:
@@ -398,6 +398,8 @@ rule sequence:
         lr_fq  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads.fastq'.format(simu_d),
     threads:
         64
+    conda:
+        'envs/badread.yml'
     params:
         badread  = 'extern/Badread/badread-runner.py',
         tmp  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads_temp'.format(simu_d),
@@ -406,11 +408,12 @@ rule sequence:
         './extern/RNAInFuser/build/sequencer '
         ' -m {input.pcr_tsv}'
         ' -r {input.cbs_fa},{input.mbs_fa},{input.dna_fa}'
-        ' -o {output.lr_fq}' 
+        ' -o {output.lr_fq}'
         ' --badread {params.badread}'
         ' -t {threads}'
         ' --temp {params.tmp}'
-        ' --seed {wildcards.seed} &&'
-        'rm -r {params.tmp}'
+        ' --seed {wildcards.seed}'
+        ' --keep-temp'
+        # ' e&& rm -r {params.tmp}'
 
 

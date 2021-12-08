@@ -1,0 +1,10 @@
+name: r-seurat
+channels:
+  - anaconda 
+  - conda-forge
+  - bioconda
+dependencies:
+  - python-edlib
+  - numpy
+  - matplotlib
+  - scipy
