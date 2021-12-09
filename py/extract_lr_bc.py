@@ -3,9 +3,12 @@ import sys
 import argparse
 from multiprocessing import Pool
 import gzip
-import edlib 
+import edlib
+import pandas as pd
+import matplotlib.ticker as mtick
 
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 def parse_args():
@@ -32,6 +35,12 @@ def parse_args():
                         type=str,
                         default=None,
                         help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
+    parser.add_argument("-p",
+                        "--plotfile",
+                        type=str,
+                        default=None,
+                        help="Path to plot file.")
+
     args = parser.parse_args()
     assert args.threads > 0
     return args
@@ -94,6 +103,38 @@ def output_lr_bc_matches(lr_bc_matches, outfile):
     for rname,b,d,l in tqdm(lr_bc_matches):
         outfile.write(f'{rname}\t{d}\t{l}\t{b}\n')
 
+def show_plots(lr_bc_matches, outfile):
+    names = ["read_id", "distance", "strand", "segment"]
+    data = pd.DataFrame(lr_bc_matches, columns=names)
+
+    new_data = data.groupby("distance").count().reset_index()
+    new_data = new_data.rename(index={1:"0", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8",
+                                      10: "9", 11: "10", 0: 'NA'})
+
+    target_row = 0
+    idx =  [i for i in range(len(new_data)) if i != target_row] + [target_row]
+    new_data = new_data.iloc[idx]
+    new_data["read_id"].cumsum(axis=0)
+    new_data["cumSum"] = new_data["read_id"].cumsum(axis=0)
+    new_data["cumSumPer"] = new_data["read_id"].cumsum(axis=0) / len(data) * 100
+    fig = plt.figure()
+
+    ax = fig.add_subplot(111)
+    ax2 = ax.twinx()
+
+    width = 0.2
+
+    new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
+    new_data.cumSum.plot(kind='bar', color='blue', ax=ax, width=width, position=0)
+    new_data.cumSumPer.plot(kind='bar', color='blue', ax=ax2, width=width, position=0)
+
+    ax.set_ylabel('Number of Long-reads')
+    ax.set_xlabel("Edit distance")
+    ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
+    ax2.set_ylabel('Percentage of Long-reads')
+
+    plt.savefig(outfile)
+
 def main():
     args = parse_args()
     print(args)
@@ -109,6 +150,7 @@ def main():
         args.outfile = sys.stdout
     output_lr_bc_matches(lr_bc_matches, args.outfile)
     args.outfile.close()
+    show_plots(lr_bc_matches, args.plotfile)
 
 if __name__ == "__main__":
     main()

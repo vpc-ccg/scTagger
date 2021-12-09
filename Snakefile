@@ -44,13 +44,14 @@ rule extract_lr_br:
         '{}/extract_lr_br/{{sample}}.txt'.format(bnch_d)
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.jpg'.format(extr_d)),
     threads:
         16
     resources:
         mem  = "256G",
         time = 59,
     shell:
-        '{input.script} -r {input.reads} -o {output.tsv} -t {threads}'
+        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
 
 rule minimap2:
     input:
@@ -174,9 +175,11 @@ rule extract_sr_br:
 
 rule get_top_sr_br:
     input:
+        script = config['exec']['select'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.sr_select_barcode.jpg'.format(extr_d))
     benchmark:
         '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
     threads:
@@ -184,26 +187,8 @@ rule get_top_sr_br:
     resources:
         mem  = "8G",
         time = 59,
-    run:
-        bc = Counter()
-        for l in tqdm(gzip.open(input.tsv)):
-            l = l.decode().rstrip().split('\t')
-            bc[l[1]]+=1
-        total = sum(bc.values())
-        del bc['NA']
-        bc = sorted(((c,b) for b,c in  bc.items()), reverse=True)
-        outfile = gzip.open(output.tsv, 'wt')
-        print(f'{len(bc)}, {total}')
-        for idx in range(0,len(bc),1000):
-            S = sum(c for c,b in bc[idx:idx+1000])
-            print(idx, S, S/total)
-            if S/total < 0.005:
-                break
-            for c,b in bc[idx:idx+1000]:
-                outfile.write(f'{b}\t{c}\n')
-            if bc[idx:idx+1000][-1][0] < 2:
-                break
-        outfile.close()
+    shell:
+        '{input.script} -i {input.tsv} -p {output.plot} -o {output.tsv} -t {threads}'
 
 rule match_aln:
     input:
@@ -231,13 +216,14 @@ rule match_trie:
         '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_match_distance.jpg'.format(extr_d)),
     threads:
         1
     resources:
         mem  = "128G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'        
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot}'
 
 
 rule validate_trie:

@@ -7,6 +7,7 @@ import math
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 
 
@@ -33,6 +34,11 @@ def parse_args():
                         default=16,
                         type=int,
                         help="Length of barcodes. Default: 16")
+    parser.add_argument("-p",
+                        "--plotfile",
+                        default=None,
+                        type=str,
+                        help="Path of plot file")
     parser.add_argument("-o",
                         "--outfile",
                         type=str,
@@ -164,6 +170,43 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
                 full_result[read_id][int(index)].add(key)
     return full_result
 
+
+def show_plot(full_data, plotfile):
+    read_id = []
+    barcodes = []
+    distance = []
+
+    for key in full_data:
+        read_id.append(key)
+        find_dict = full_data[key]
+        tmp_barcodes = []
+        if len(find_dict["0"]) > 0:
+            tmp_barcodes = find_dict["0"]
+            distance.append(0)
+        elif len(find_dict["1"]) > 0:
+            tmp_barcodes = find_dict["1"]
+            distance.append(1)
+        elif len(find_dict["2"]) > 0:
+            tmp_barcodes = find_dict["2"]
+            distance.append(2)
+        else:
+            distance.append(-1)
+
+        barcodes.append(tmp_barcodes)
+        trie_dataframe = pd.DataFrame({"read_id": read_id, "barcodes": barcodes, "distance": distance})
+        new_data = trie_dataframe.groupby("distance").count()
+        fig = plt.figure()
+        ax = fig.add_subplot(111)
+        width = 0.2
+
+        new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
+
+        ax.set_ylabel('Number of long-reads')
+        ax.set_xlabel("Edit distance")
+
+        plt.savefig(plotfile)
+
+
 def main():
     args = parse_args()
     print(args)
@@ -172,6 +215,7 @@ def main():
     long_reads = read_long_reads(args.long_read_segments)
 
     result = run_get_matches(selected_barcode, long_reads, args.max_error, args.barcode_length)
+    show_plot(result, args.plotfile)
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt')
     else:
