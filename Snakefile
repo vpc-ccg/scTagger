@@ -223,7 +223,7 @@ rule match_trie:
         mem  = "128G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'        
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot}'
 
 
 rule validate_trie:
