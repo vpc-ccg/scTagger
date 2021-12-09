@@ -216,6 +216,7 @@ rule match_trie:
         '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_match_distance.jpg'.format(extr_d)),
     threads:
         1
     resources:
