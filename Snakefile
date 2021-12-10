@@ -1,7 +1,9 @@
-import pysam
-import gzip
-from tqdm import tqdm
 from collections import Counter
+import gzip
+import os
+
+import pysam
+from tqdm import tqdm
 
 configfile: 'config.yaml'
 
@@ -19,6 +21,27 @@ clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
 seurat_d = f'{outpath}/seurat-out'
+simu_d = f'{outpath}/simulation'
+
+print(simu_d)
+sim_samples = dict()
+for sample in list(config['samples'].keys()):
+    for gcs in config['gene_cell_seed']:
+        k = f'sim_{sample}_{gcs}'
+        config['samples'][k] = dict(
+            ref = config['samples'][sample]['ref'],
+            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/long-reads.fastq'),
+            sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}'),
+            sr_fastq_prefix = 'hg_100',
+            sr_reads = dict(
+                R1 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/hg_100_S1_L001_R1_001.fastq.gz'),
+                R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/hg_100_S1_L001_R2_001.fastq.gz'),
+            ),
+            cell_count = int(gcs.split('-')[1]),
+            seurat_config = config['samples'][sample]['seurat_config'],
+        )
+    del config['samples'][sample]
+
 
 rule all:
     input:
@@ -30,10 +53,10 @@ rule all:
         expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
-        expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
-        expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
-        expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
-        expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
+        # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
+        # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
+        # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
+        # expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
         # expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule extract_lr_br:
@@ -42,6 +65,8 @@ rule extract_lr_br:
         reads = lambda wildcards: config['samples'][wildcards.sample]['reads'],
     benchmark:
         '{}/extract_lr_br/{{sample}}.txt'.format(bnch_d)
+    wildcard_constraints:
+        sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -66,6 +91,8 @@ rule minimap2:
     resources:
         mem  = "128G",
         time = 1439,
+    wildcard_constraints:
+        sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     shell:
         'minimap2 -a -x splice -t {threads} {input.genome} {input.reads} | '
         '  samtools sort -T {output.bam}.tmp -m 2G -@ {threads} -O bam - > {output.bam} && '
@@ -293,9 +320,10 @@ rule cell_ranger_count:
     benchmark:
         '{}/cell_ranger_count/{{sample}}.txt'.format(bnch_d)
     shell:
-        'mkdir -p {params.outdir} && cd {params.outdir} && '
+        'rm -r {params.outdir} && mkdir -p {params.outdir} && cd {params.outdir} && '
         '  cellranger count '
         ' --id={wildcards.sample}'
+        ' --chemistry=SC3Pv3'
         ' --transcriptome={input.ref}'
         ' --fastq={input.sr_fastq_dir}'
         ' --sample={params.sample_prefix}'

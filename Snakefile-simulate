@@ -7,6 +7,8 @@ import tqdm
 
 configfile: 'config.yaml'
 
+srAdapt = 'CTACACGACGCTCTTCCGATCT'
+
 for k in config.keys():
     if not k.startswith('override_'):
         continue
@@ -48,8 +50,6 @@ rule all:
                 'long-reads.fastq',
             ]
         ),
-        # lr_fq  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads.fastq'.format(simu_d),
-
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
 
@@ -292,8 +292,8 @@ rule split_minnow_output:
         cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
         mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
     params:
-        lr_cnt = 1_000,
-        sr_cnt = 1_000_000,
+        lr_cnt = 10_000,
+        sr_cnt = 100_000,
     run:
         minnow_cnt = int(open(input.wc).read())
         print(f'Minnow sim count: {minnow_cnt}')
@@ -314,8 +314,8 @@ rule split_minnow_output:
         mols_tsv = open(output.mols_tsv, 'w+')
         cbs_fa = open(output.cbs_fa, 'w+')
         mbs_fa = open(output.mbs_fa, 'w+')
-        r1_fq = open(output.r1_fq, 'w+')
-        r2_fq = open(output.r2_fq, 'w+')
+        r1_fq = gzip.open(output.r1_fq, 'wt+')
+        r2_fq = gzip.open(output.r2_fq, 'wt+')
 
         print('Outputting a random sample of molecules')
         random.seed(int(wildcards.seed))
@@ -344,21 +344,18 @@ rule split_minnow_output:
                     tid = l1[1]
                     contig = tids[tid]['contig']
                     exons = tids[tid]['exons']
-                    gene_id = tids[tid]['gene_id']
                     strand = tids[tid]['strand']
-                    mols_tsv.write(f'+{mid}\t{1}\t{3+len(exons)}\t{gene_id}\n')
-                    if strand == '+':
-                        mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
-                        mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
-                        mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
-                        for s,e in exons:
-                            mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
-                    else:
-                        for s,e in exons:
-                            mols_tsv.write(f'{contig}\t{s}\t{e}\t{strand}\n')
-                        mols_tsv.write(f'polyA\t{0}\t{30}\t+\n')
-                        mols_tsv.write(f'mb_{mbs[mb]}\t{0}\t{10}\t+\n')
-                        mols_tsv.write(f'cb_{cbs[cb]}\t{0}\t{16}\t+\n')
+                    gene_id = tids[tid]['gene_id']
+
+                    outlines = [f'{contig}\t{s}\t{e}\t{strand}\n' for s,e in exons] + [
+                            f'polyA\t{0}\t{30}\t+\n',
+                            f'mb_{mbs[mb]}\t{0}\t{10}\t-\n',
+                            f'cb_{cbs[cb]}\t{0}\t{16}\t-\n',
+                            f'srAdapt\t{0}\t{len(srAdapt)}\t-\n',
+                    ]
+                    mols_tsv.write(f'+{mid}\t{1}\t{len(outlines)}\t{gene_id}\n')
+                    for l in outlines:
+                        mols_tsv.write(l)
                     mid += 1
                 elif P_l < R < P_l + P_s:
                     r1_fq.write(l1)
@@ -370,6 +367,7 @@ rule split_minnow_output:
                         r2_fq.write(l2)
                 else:
                     continue
+        cbs_fa.write(f'>srAdapt\n{srAdapt}\n')
         cbs_fa.write(f'>polyA\n{"A"*200}\n')
         mols_tsv.close()
         cbs_fa.close()
@@ -383,10 +381,15 @@ rule pcr:
         mols_tsv = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
         cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
         mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+    params:
+        cycles  = 3,
     output:
         pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
     shell:
-        './extern/RNAInFuser/build/pcr -m {input.mols_tsv} -r {input.cbs_fa} {input.mbs_fa} -o {output.pcr_tsv} --cycles 3'
+        './extern/RNAInFuser/build/pcr'
+        ' -m {input.mols_tsv}'
+        ' -o {output.pcr_tsv}'
+        ' --cycles {params.cycles}'
 
 rule sequence:
     input:
@@ -414,6 +417,6 @@ rule sequence:
         ' --temp {params.tmp}'
         ' --seed {wildcards.seed}'
         ' --keep-temp'
-        # ' e&& rm -r {params.tmp}'
+        # ' && rm -r {params.tmp}'
 
 
