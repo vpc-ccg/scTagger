@@ -60,10 +60,16 @@ def parse_args():
                         type=str,
                         default=None,
                         help="Path to plot file. Default: no plotting")
-
+    parser.add_argument("--num-bp-after",
+                        type=int,
+                        default=20,
+                        help="Number of bases after the end of the SR adapter alignment to generate. Default: 20")
     args = parser.parse_args()
+    assert 0<args.num_bp_after
     ranges = [list(),list()]
-    ranges_dict = [dict(), dict()]
+    global ranges_dicts, num_bp_after
+    num_bp_after = args.num_bp_after
+    ranges_dicts = [dict(), dict()]
     for r in args.ranges:
         assert r[0] in 'fr', r
         strand = r[0]
@@ -82,14 +88,12 @@ def parse_args():
             assert False, (strand)
         # print(strand, r, (s,e))
         for i in np.arange(s,e):
-            assert not i in ranges_dict[ranges_idx], (ranges_idx, i, ranges_dict[ranges_idx])
+            assert not i in ranges_dicts[ranges_idx], (ranges_idx, i, ranges_dicts[ranges_idx])
             # print(i, end=', ')
-            ranges_dict[ranges_idx][i] = len(ranges[ranges_idx])
+            ranges_dicts[ranges_idx][i] = len(ranges[ranges_idx])
         ranges[ranges_idx].append((s,e))
         # print()
-
-    args.ranges = ranges        
-    args.ranges_dict = ranges_dict        
+    args.ranges = ranges 
     assert args.threads > 0
     return args
 
@@ -192,7 +196,8 @@ def get_possible_ranges(alns):
     print(f'Found these ranges on - strand:\t{ranges_r}', file=sys.stderr)
     return ranges_f,ranges_r
 
-def get_range_dicts(ranges):
+def set_global_range_dicts(ranges):
+    global ranges_dicts
     ranges_dicts = list()
     for R in ranges:
         ranges_dict = dict()
@@ -201,7 +206,6 @@ def get_range_dicts(ranges):
                 assert not i in ranges_dict, (i,ranges_dict)
                 ranges_dict[i] = idx
         ranges_dicts.append(ranges_dict)
-    return ranges_dicts
 
 def get_lr_bc_alns(seqs, threads):
     print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
@@ -211,29 +215,52 @@ def get_lr_bc_alns(seqs, threads):
             alns.append((s,d,locs))
     return alns
 
+def get_filter_alns(alns, threads):
+    print(f'Filtering alignments using ranges on {threads} threads', file=sys.stderr)
+    fin_alns = list()
+    with Pool(threads) as p:
+        for dist,loc,s,e in tqdm(p.imap(filter_aln, alns, chunksize=10000), total=len(alns)):
+            fin_alns.append((dist,loc,s,e))
+    return fin_alns
 
-def output_matches(rnames, seqs, alns, ranges_dicts, outfile, num_bp_after=20):
-    for rname,seq,(strand,dist,locs) in tqdm(zip(rnames, seqs, alns), total=len(rnames)):
-        # print(locs)
-        range_idx = int(strand == '-')
-        range_hits = {ranges_dicts[range_idx].get(l, -1) for l in locs}
-        # print(range_idx, range_hits)
-        if -1 in range_hits or len(range_hits) != 1:
-            outfile.write(f'{rname}\t{-1}\t{"NA"}\t{""}\n')
+def filter_aln(aln):
+    strand,dist,locs = aln
+    range_idx = int(strand == '-')
+    range_hits = {ranges_dicts[range_idx].get(l, -1) for l in locs}
+    if -1 in range_hits or len(range_hits) != 1:
+        dist = -1
+        loc = 'NA'
+        s = e = -1
+    else:
+        if strand == '+':
+            s = max(0, min(locs)-2)
+            e = max(locs)+num_bp_after
+            loc = s
         else:
-            if strand == '+':
-                s = max(0,        min(locs)-2)
-                e = min(len(seq), max(locs)+num_bp_after)
-                l = s
-            else:
-                s = max(-len(seq), min(locs)-num_bp_after)
-                e = min(0, max(locs)+2)
-                l = e
-            outfile.write(f'{rname}\t{dist}\t{l}\t{seq[s:e or None]}\n')
+            s = min(locs)-num_bp_after
+            e = min(0, max(locs)+2)
+            loc = e
+    return dist,loc,s,e
 
-def show_plots(lr_bc_matches, outfile):
-    names = ["read_id", "distance", "strand", "segment"]
-    data = pd.DataFrame(lr_bc_matches, columns=names)
+def get_lr_bc_alns(seqs, threads):
+    print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
+    alns = list()
+    with Pool(threads) as p:
+        for s,d,locs in tqdm(p.imap(get_alns, seqs, chunksize=10000), total=len(seqs)):
+            alns.append((s,d,locs))
+    return alns
+
+
+def output_matches(rnames, seqs, alns, outfile):
+    print(f'Writng to {outfile}', file=sys.stderr)
+    for rname,seq,(dist,loc,s,e) in tqdm(zip(rnames, seqs, alns), total=len(rnames)):
+        outfile.write(f'{rname}\t{dist}\t{loc}\t{seq[s:e or None]}\n')
+
+def show_plots(rnames, alns, outfile):
+    names = ["read_id", "distance"]
+    data = pd.DataFrame([
+        (r,d) for r,(d,_,_,_) in zip(rnames,alns)
+    ], columns=names)
 
     new_data = data.groupby("distance").count().reset_index()
     new_data = new_data.rename(index={1:"0", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8",
@@ -245,7 +272,7 @@ def show_plots(lr_bc_matches, outfile):
     new_data["read_id"].cumsum(axis=0)
     new_data["cumSum"] = new_data["read_id"].cumsum(axis=0)
     new_data["cumSumPer"] = new_data["read_id"].cumsum(axis=0) / len(data) * 100
-    fig = plt.figure()
+    fig = plt.figure(figsize=(10,5))
 
     ax = fig.add_subplot(111)
     ax2 = ax.twinx()
@@ -275,19 +302,20 @@ def main():
     if len(args.ranges[0]) + len(args.ranges[1]) == 0:
         print('No ranges for SR adapters have been preset. Detecting directly from data...', file=sys.stderr)
         args.ranges = get_possible_ranges(alns)
-        args.ranges_dict = get_range_dicts(args.ranges)
+        set_global_range_dicts(args.ranges)
+    alns = get_filter_alns(alns, args.threads)        
     # print(args.ranges)
     # print(args.ranges_dict)
     if args.outfile:
         args.outfile = gzip.open(args.outfile, 'wt+')
     else:
         args.outfile = sys.stdout
-    output_matches(rnames, seqs, alns, args.ranges_dict, args.outfile)
+    output_matches(rnames, seqs, alns, args.outfile)
     args.outfile.close()
+    if args.plotfile != None:
+        show_plots(rnames, alns, args.plotfile)
     # output_lr_bc_matches(lr_bc_matches, args.outfile)
     # args.outfile.close()
-    # if args.plotfile != None:
-    #     show_plots(lr_bc_matches, args.plotfile)
 
 if __name__ == "__main__":
     main()
