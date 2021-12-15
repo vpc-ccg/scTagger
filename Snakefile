@@ -17,27 +17,26 @@ for k in config.keys():
 
 outpath = config['outpath'].rstrip('/')
 bnch_d = f'{outpath}/benchmark-out'
-clrg_d = f'{outpath}/cellranger-out'
+clrg_d = f'{os.path.abspath(outpath)}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
 seurat_d = f'{outpath}/seurat-out'
+flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 
-print(simu_d)
-sim_samples = dict()
 for sample in list(config['samples'].keys()):
-    for gcs in config['gene_cell_seed']:
-        k = f'sim_{sample}_{gcs}'
+    for gcsSL in config['gene_cell_seed_sr_lr']:
+        k = f'sim_{sample}_{gcsSL}'
         config['samples'][k] = dict(
             ref = config['samples'][sample]['ref'],
-            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/long-reads.fastq'),
-            sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}'),
+            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/long-reads.fastq'),
+            sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}'),
             sr_fastq_prefix = 'hg_100',
             sr_reads = dict(
-                R1 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/hg_100_S1_L001_R1_001.fastq.gz'),
-                R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcs}/hg_100_S1_L001_R2_001.fastq.gz'),
+                R1 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R1_001.fastq.gz'),
+                R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R2_001.fastq.gz'),
             ),
-            cell_count = int(gcs.split('-')[1]),
+            cell_count = int(gcsSL.split('-')[1]),
             seurat_config = config['samples'][sample]['seurat_config'],
         )
     del config['samples'][sample]
@@ -53,6 +52,8 @@ rule all:
         expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.match.fastq'.format(flames_d), sample=config['samples']),
         # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
@@ -209,13 +210,11 @@ rule get_top_sr_br:
         plot = protected('{}/{{sample}}/{{sample}}.sr_select_barcode.jpg'.format(extr_d))
     benchmark:
         '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
-    threads:
-        1
     resources:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -p {output.plot} -o {output.tsv} -t {threads}'
+        '{input.script} -i {input.tsv} -p {output.plot} -o {output.tsv}'
 
 rule match_aln:
     input:
@@ -328,3 +327,21 @@ rule seurat:
     shell:
         'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}/'
 
+rule flames:
+    input:
+        script = 'extern/FLAMES/src/bin/match_cell_barcode',
+        reads  = lambda wildcards: config['samples'][wildcards.sample]['reads'],
+        whitelist = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+    output:
+        csv   = protected('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d)),
+        fastq = protected('{}/{{sample}}/{{sample}}.match.fastq'.format(flames_d)),
+    params:
+        tmp_in_dir = '{}/{{sample}}_fastq'.format(flames_d),
+        edit_dist = 1,
+    conda:
+        'envs/flames.yml'
+    shell:
+        'rm -rf {params.tmp_in_dir}  && \n'
+        'mkdir -p {params.tmp_in_dir}  && \n'
+        'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
+        '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <({input.whitelist}) {params.edit_dist}'

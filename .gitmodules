@@ -10,3 +10,6 @@
 [submodule "extern/Badread"]
 	path = extern/Badread
 	url = https://github.com/baraaorabi/Badread
+[submodule "extern/FLAMES"]
+	path = extern/FLAMES
+	url = https://github.com/LuyiTian/FLAMES

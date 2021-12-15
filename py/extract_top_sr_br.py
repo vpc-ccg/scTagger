@@ -2,7 +2,6 @@
 import sys
 import argparse
 import gzip
-import edlib
 import pandas as pd
 
 from tqdm import tqdm
@@ -20,76 +19,57 @@ def parse_args():
                         type=str,
                         required=True,
                         help="Input file")
-    parser.add_argument("-t",
-                        "--threads",
-                        default=1,
-                        type=int,
-                        help="Number of threads. Default: 1")
     parser.add_argument("-o",
                         "--outfile",
                         type=str,
                         default=None,
-                        help="Path to output file")
+                        help="Path to output file. Default: STDOUT")
     parser.add_argument("-p",
                         "--plotfile",
                         type=str,
                         default=None,
                         help="Path to plot file")
-
+    parser.add_argument("--thresh",
+                        type=float,
+                        default=0.005,
+                        help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
+    parser.add_argument("--step-size",
+                        type=int,
+                        default=1000,
+                        help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
+    parser.add_argument("--max-barcode-cnt",
+                        type=int,
+                        default=50_000,
+                        help="Max number of barcodes to keep. Default: 50,000")
     args = parser.parse_args()
-    assert args.threads > 0
+    assert 0 <= args.thresh <= 1
+    assert 0 < args.step_size 
+    assert 0 < args.max_barcode_cnt 
     return args
 
-def rev(x):
-    complement = {'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A'}
-    return "".join(complement.get(base, base) for base in reversed(x))
-
 def read_short_reads(path):
-    file1 = open(path, 'r')
-    Lines = file1.readlines()
+    if path.endswith('.gz'):
+        f = gzip.open(path, 'rt')
+    else:
+        f = open(path, 'r')
+    barcodes = list()
+    total = 0
+    for line in tqdm(f):
+        total+=1
+        _,cb,_ = line.rstrip('\n').split('\t')
+        if cb == 'NA':
+            continue
+        barcodes.append(cb)
+    return total,barcodes
 
-    barcodes_list = []
-    distribution = dict()
-    count = 0
-    for line in tqdm(Lines):
-        b = line.replace("\n", "").split("\t")
-        if len(set(b[2]) - set("ATCG")) == 0:
-            count += (b[1] == b[2])
-            if b[1] != b[2]:
-                distance = edlib.align(b[2], b[1], mode="HW")["editDistance"]
-                distance_rev = edlib.align(b[2], rev(b[1]), mode="HW")["editDistance"]
-                barcodes_list.append((b[2], min(distance, distance_rev)))
-            else:
-                barcodes_list.append((b[2], 0))
-
-    short_read_barcode = [x[0] for x in barcodes_list]
-    return short_read_barcode
-
-
-def select_barcode(inputPath, thresh, steps, endpoint):
-    sr_barcodes_list = read_short_reads(inputPath)
-    diff = 1
-    start = 0
-    short_reads_count = Counter(sr_barcodes_list)
-    sort_orders = sorted(short_reads_count.items(), key=lambda x: x[1], reverse=True)
-    total = sum([x[1] for x in sort_orders])
-    remaining = total
-    selected_barcode = []
-    distribution = {}
-    for idx, x in enumerate(sort_orders):
-        if diff > thresh:
-            selected_barcode.append(x)
-
-        if idx % steps == 0:
-            distribution[idx] = 1 - remaining / total
-            diff = (1 - remaining / total) - start
-            start = (1 - remaining / total)
-        remaining -= x[1]
-
-        if idx > endpoint:
-            break
-
-    return selected_barcode, distribution, sort_orders
+def get_barcode_hist(barcode_cnts, step_size, max_barcode_cnt):
+    distribution = list()
+    for idx in range(0, min(max_barcode_cnt,len(barcode_cnts)), step_size):
+        cur_barcode_cnts = barcode_cnts[idx:idx+step_size]
+        distribution.append(
+            sum(cur_barcode_cnts)
+        )        
+    return distribution
 
 
 def show_plot(short_read_barcode, distribution, outfile):
@@ -130,13 +110,36 @@ def show_plot(short_read_barcode, distribution, outfile):
 
 def main():
     args = parse_args()
-    sr_barcodes_list = read_short_reads(args.input)
-    short_read_barcode = [x[0] for x in sr_barcodes_list[0]]
-    selected_barcode, distribution, sort_orders = select_barcode(short_read_barcode, 0.005, 1000, 50000)
-    show_plot(short_read_barcode, distribution, args.plotfile)
+    total, barcodes = read_short_reads(args.input)
+    barcode_cnts = Counter(barcodes)
+    barcode_cnts = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)
+    barcodes,barcode_cnts = tuple(zip(*barcode_cnts))
+    barcode_hist = get_barcode_hist(
+        barcode_cnts=barcode_cnts,
+        step_size=args.step_size,
+        max_barcode_cnt=args.max_barcode_cnt,
+    )
+    if args.plotfile != None:
+        show_plot(
+            total=total,
+            distribution=distribution,
+            outfile=args.plotfile,
+        )
 
-    outfile = gzip.open(args.outfile, 'wt')
-    for b, c in sort_orders:
+    last_idx = args.max_barcode_cnt
+    for idx,c in enumerate(barcode_hist):
+        if c / total < args.thresh:
+            last_idx = min(
+                (idx+1) * args.step_size,
+                args.max_barcode_cnt,
+                len(barcodes)
+            )
+            break
+    if args.outfile:
+        outfile = gzip.open(args.outfile, 'wt+')
+    else:
+        outfile = sys.stdout
+    for b, c in zip(barcodes[:last_idx],barcode_cnts[:last_idx]):
         outfile.write(f'{b}\t{c}\n')
     outfile.close()
 

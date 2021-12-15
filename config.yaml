@@ -19,10 +19,8 @@ exec:
     seurat:
         preprocessing: R/preprocessing_pipeline.R
 
-gene_cell_seed:
-#    - '5000-2000-42'
-#    - '8000-3000-42'
-    - '100-200-42'
+gene_cell_seed_sr_lr:
+    - '10-30-42-5000-1000'
 
 samples:
     C1:

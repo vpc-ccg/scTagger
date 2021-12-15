@@ -32,14 +32,14 @@ rule all:
         expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
         expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
         expand(
-            '{}/minnow_simulate/{{sample}}/{{gcs}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+            '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
             sample = config['samples'],
-            gcs = config['gene_cell_seed'],
+            gcsSL = config['gene_cell_seed_sr_lr'],
         ),
         expand(
-            '{}/reads/{{sample}}/{{gcs}}/{{f}}'.format(simu_d),
+            '{}/reads/{{sample}}/{{gcsSL}}/{{f}}'.format(simu_d),
             sample = config['samples'],
-            gcs = config['gene_cell_seed'],
+            gcsSL = config['gene_cell_seed_sr_lr'],
             f = [
                 'hg_100_S1_L001_R1_001.fastq.gz',
                 'hg_100_S1_L001_R2_001.fastq.gz',
@@ -194,38 +194,38 @@ rule minnow_splatter:
     input:
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
     output:
-        directory('{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d)),
+        directory('{}/minnow_splatter/{{sample}}/{{gene_cnt}}-{{cell_cnt}}-{{seed}}-{{S}}-{{L}}'.format(simu_d)),
     conda:
         'envs/simulate.yml'
     shell:
         'R/minnow_splatter.R '
         ' {output} '
-        ' {wildcards.num_genes} '
-        ' {wildcards.num_cells}'
+        ' {wildcards.gene_cnt} '
+        ' {wildcards.cell_cnt}'
         ' {wildcards.seed} && '
         'cut -f2 {input.tgMap} '
         ' | sort -u '
-        ' | shuf -n {wildcards.num_genes} --random-source=<(yes {wildcards.seed})'
+        ' | shuf -n {wildcards.gene_cnt} --random-source=<(yes {wildcards.seed})'
         ' > {output}/quants_mat_rows.txt'
 
 
 rule minnow_simulate:
     input:
-        splatter = '{}/minnow_splatter/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
+        splatter = '{}/minnow_splatter/{{sample}}/{{gcsSL}}'.format(simu_d),
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
         index = '{}/minnow_index'.format(simu_d),
         estimate = '{}/minnow_estimate/{{sample}}'.format(simu_d),
         whitelist = config['salmon_refs']['whitelist'],
     output:
-        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
-        r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
+        r1 = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2 = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
     threads:
         64
     resources:
         mem  = "512G",
         time = 60*6-1,
     params:
-        outpath = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}'.format(simu_d),
+        outpath = '{}/minnow_simulate/{{sample}}/{{gcsSL}}'.format(simu_d),
         pcr = 4,
         err = 0.01,
     shell:
@@ -273,36 +273,40 @@ rule pickle_annot:
 
 rule count_reads:
     input:
-        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r1 = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
     output:
-        wc = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
+        wc = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
     shell:
         'zcat {input} | wc -l | awk \'{{print $1/4}}\' > {output}'
 
 rule split_minnow_output:
     input:
-        wc = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
-        r1 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
-        r2 = '{}/minnow_simulate/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
+        wc = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.wc'.format(simu_d),
+        r1 = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2 = '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
         pkl = f'{simu_d}/gtf.pkl'
     output:
-        r1_fq    = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
-        r2_fq    = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
-        mols_tsv = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
-        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
-        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
-    params:
-        lr_cnt = 10_000,
-        sr_cnt = 100_000,
+        r1_fq    = '{}/reads/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
+        r2_fq    = '{}/reads/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R2_001.fastq.gz'.format(simu_d),
+        mols_tsv = '{}/reads/{{sample}}/{{gcsSL}}/mols.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{gcsSL}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{gcsSL}}/mbs.fa'.format(simu_d),
     run:
+        (
+            gene_cnt,
+            cell_cnt,
+            seed,
+            sr_cnt,
+            lr_cnt,
+        ) = [int(x) for x in wildcards.gcsSL.split('-')]
         minnow_cnt = int(open(input.wc).read())
         print(f'Minnow sim count: {minnow_cnt}')
-        if minnow_cnt < params.lr_cnt + params.sr_cnt:
-            minnow_cnt = params.lr_cnt + params.sr_cnt
-        P_l = params.lr_cnt/(minnow_cnt)
-        P_s = params.sr_cnt/(minnow_cnt)
-        print(f'SR count: {params.sr_cnt}')
-        print(f'LR count: {params.lr_cnt}')
+        if minnow_cnt < lr_cnt + sr_cnt:
+            minnow_cnt = lr_cnt + sr_cnt
+        P_l = lr_cnt/(minnow_cnt)
+        P_s = sr_cnt/(minnow_cnt)
+        print(f'SR count: {sr_cnt}')
+        print(f'LR count: {lr_cnt}')
         print(f'SR probability: {P_s}')
         print(f'LR probability: {P_l}')
 
@@ -318,8 +322,8 @@ rule split_minnow_output:
         r2_fq = gzip.open(output.r2_fq, 'wt+')
 
         print('Outputting a random sample of molecules')
-        random.seed(int(wildcards.seed))
-        print(f'Seed: {int(wildcards.seed)}')
+        random.seed(seed)
+        print(f'Seed: {seed}')
         mid = 0
         with gzip.open(input.r1, 'rt') as f1, gzip.open(input.r2, 'rt') as f2:
             for _ in  tqdm.tqdm(range(minnow_cnt*4)):
@@ -378,34 +382,35 @@ rule split_minnow_output:
 
 rule pcr:
     input:
-        mols_tsv = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mols.tsv'.format(simu_d),
-        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
-        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+        mols_tsv = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/mols.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/mbs.fa'.format(simu_d),
     params:
         cycles  = 3,
     output:
-        pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
+        pcr_tsv  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
     shell:
         './extern/RNAInFuser/build/pcr'
         ' -m {input.mols_tsv}'
         ' -o {output.pcr_tsv}'
         ' --cycles {params.cycles}'
+        ' --seed {wildcards.seed}'
 
 rule sequence:
     input:
-        pcr_tsv  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/pcr.tsv'.format(simu_d),
-        cbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/cbs.fa'.format(simu_d),
-        mbs_fa   = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/mbs.fa'.format(simu_d),
+        pcr_tsv  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
+        mbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/mbs.fa'.format(simu_d),
         dna_fa   = config['salmon_refs']['genome'],
     output:
-        lr_fq  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads.fastq'.format(simu_d),
+        lr_fq  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
     threads:
         64
     conda:
         'envs/badread.yml'
     params:
         badread  = 'extern/Badread/badread-runner.py',
-        tmp  = '{}/reads/{{sample}}/{{num_genes}}-{{num_cells}}-{{seed}}/long-reads_temp'.format(simu_d),
+        tmp  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads_temp'.format(simu_d),
     shell:
         'mkdir -p {params.tmp} && '
         './extern/RNAInFuser/build/sequencer '
