@@ -20,7 +20,8 @@ exec:
         preprocessing: R/preprocessing_pipeline.R
 
 gene_cell_seed_sr_lr:
-    - '10-30-42-5000-1000'
+    # - '10-30-42-5000-1000'
+    - '10-30-42-50000-10000'
 
 samples:
     C1:

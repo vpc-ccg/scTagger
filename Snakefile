@@ -44,7 +44,7 @@ for sample in list(config['samples'].keys()):
 
 rule all:
     input:
-        expand('{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
@@ -53,7 +53,7 @@ rule all:
         expand('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.match.fastq'.format(flames_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d), sample=config['samples']),
         # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
@@ -177,8 +177,7 @@ rule freddie_isoforms:
 
 rule extract_sr_br:
     input:
-        bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
-        # bam = lambda wildcards: config['samples'][wildcards.sample]['sr_bam'],
+        bam = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
     benchmark:
         '{}/extract_sr_br/{{sample}}.txt'.format(bnch_d)
     output:
@@ -200,21 +199,20 @@ rule extract_sr_br:
             outfile.write(f'{qname}\t{C}\t{U}\n')
         outfile.close()
 
-
 rule get_top_sr_br:
     input:
         script = config['exec']['select'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.sr_select_barcode.jpg'.format(extr_d))
+        # plot = protected('{}/{{sample}}/{{sample}}.sr_select_barcode.jpg'.format(extr_d))
     benchmark:
         '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
     resources:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -p {output.plot} -o {output.tsv}'
+        '{input.script} -i {input.tsv} -o {output.tsv}'
 
 rule match_aln:
     input:
@@ -242,14 +240,14 @@ rule match_trie:
         '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_match_distance.jpg'.format(extr_d)),
+        # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_match_distance.jpg'.format(extr_d)),
     threads:
         1
     resources:
         mem  = "128G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot}'
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} '#-p {output.plot}'
 
 
 rule validate_trie:
@@ -284,15 +282,13 @@ rule validate_trie:
         for am,tm in lr.values():
             assert am==tm
         
-
 rule cell_ranger_count:
     input:
         sr_fastq_dir = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_dir'],
         ref = lambda wildcards: config['references'][config['samples'][wildcards.sample]['ref']]['cellranger_ref'],
     output:
-        # directory("outs/web_summary.html"),
-        bam = '{}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
-        matrix = directory('{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d)),
+        bam = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+        matrix = directory('{}/{{sample}}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d)),
     params:
         outdir = '{}/{{sample}}'.format(clrg_d),
         sample_prefix = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_prefix'],
@@ -319,7 +315,7 @@ rule seurat:
     input:
         config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
         script = config['exec']['seurat']['preprocessing'],
-        input_path = '{}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
+        input_path = '{}/{{sample}}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
     output:
         out_path = protected('{}/{{sample}}/'.format(seurat_d)),
     benchmark:
@@ -334,14 +330,14 @@ rule flames:
         whitelist = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
     output:
         csv   = protected('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d)),
-        fastq = protected('{}/{{sample}}/{{sample}}.match.fastq'.format(flames_d)),
+        fastq = protected('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d)),
     params:
         tmp_in_dir = '{}/{{sample}}_fastq'.format(flames_d),
-        edit_dist = 1,
+        edit_dist = 4,
     conda:
         'envs/flames.yml'
     shell:
         'rm -rf {params.tmp_in_dir}  && \n'
         'mkdir -p {params.tmp_in_dir}  && \n'
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
-        '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <({input.whitelist}) {params.edit_dist}'
+        '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'

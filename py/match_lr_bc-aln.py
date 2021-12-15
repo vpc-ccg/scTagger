@@ -111,7 +111,7 @@ def get_sr_barcodes(barcodes_tsv):
 def output_lr_bc_matches(lr_names, lr_segments, lr_matches, lr_dists, outfile):
     for n,s,m,d in tqdm(zip(lr_names, lr_segments, lr_matches, lr_dists), total=len(lr_names)):
         c = len(m)
-        m = ','.join([sr_barcodes[bid] for bid in m])
+        m = ','.join(sorted(sr_barcodes[bid] for bid in (m)))
         outfile.write(f'{n}\t{d}\t{c}\t{s}\t{m}\n')
 
 def main():

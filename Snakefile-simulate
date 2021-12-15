@@ -23,6 +23,12 @@ extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
 simu_d = f'{outpath}/simulation'
 
+lr_sim_cyc = 3
+lr_sim_eff = 0.75
+lr_sim_err = 0.000001
+minnow_cyc = 4
+minnow_err = 0.000001
+
 rule all:
     input:
         'extern/minnow/build/src/minnow',
@@ -152,8 +158,6 @@ rule minnow_index:
         index = '{}/salmon_index'.format(simu_d),
     output:
         directory('{}/minnow_index'.format(simu_d))
-    # conda:
-    #     'envs/simulate.yml'
     threads:
         64
     resources:
@@ -208,7 +212,6 @@ rule minnow_splatter:
         ' | shuf -n {wildcards.gene_cnt} --random-source=<(yes {wildcards.seed})'
         ' > {output}/quants_mat_rows.txt'
 
-
 rule minnow_simulate:
     input:
         splatter = '{}/minnow_splatter/{{sample}}/{{gcsSL}}'.format(simu_d),
@@ -226,15 +229,13 @@ rule minnow_simulate:
         time = 60*6-1,
     params:
         outpath = '{}/minnow_simulate/{{sample}}/{{gcsSL}}'.format(simu_d),
-        pcr = 4,
-        err = 0.01,
     shell:
         'extern/minnow/build/src/minnow simulate --splatter-mode '
         ' --inputdir {input.splatter} '
         ' -r {input.index}/ref_k101_fixed.fa '
         ' --g2t {input.tgMap} '
-        ' --PCR {params.pcr} '
-        ' -e {params.err} '
+        f' --PCR {minnow_cyc:d} '
+        f' -e {minnow_err:f} '
         ' -p {threads} '
         ' -o {params.outpath} '
         ' --dbg '
@@ -299,6 +300,8 @@ rule split_minnow_output:
             sr_cnt,
             lr_cnt,
         ) = [int(x) for x in wildcards.gcsSL.split('-')]
+        # Estimating how many mols needed as input to LR PCR step to end up with to lr_cnt
+        lr_cnt = lr_cnt//(1+lr_sim_eff)**lr_sim_cyc+1
         minnow_cnt = int(open(input.wc).read())
         print(f'Minnow sim count: {minnow_cnt}')
         if minnow_cnt < lr_cnt + sr_cnt:
@@ -377,23 +380,22 @@ rule split_minnow_output:
         cbs_fa.close()
         mbs_fa.close()
         r1_fq.close()
-        r2_fq.close()
-            
+        r2_fq.close() 
 
 rule pcr:
     input:
         mols_tsv = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/mols.tsv'.format(simu_d),
         cbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
         mbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/mbs.fa'.format(simu_d),
-    params:
-        cycles  = 3,
     output:
         pcr_tsv  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
     shell:
         './extern/RNAInFuser/build/pcr'
         ' -m {input.mols_tsv}'
         ' -o {output.pcr_tsv}'
-        ' --cycles {params.cycles}'
+        f' --cycles {lr_sim_cyc:d}'
+        f' --efficiency {lr_sim_eff:f}'
+        f' --error-rate {lr_sim_err:f}'
         ' --seed {wildcards.seed}'
 
 rule sequence:

@@ -38,7 +38,7 @@ def parse_args():
                         "--plotfile",
                         default=None,
                         type=str,
-                        help="Path of plot file")
+                        help="Path of plot file. Default: no plotting")
     parser.add_argument("-o",
                         "--outfile",
                         type=str,
@@ -114,7 +114,7 @@ class Trie(object):
 
 def read_long_reads(path):
 
-    names=["read_id", "distance", "strand","segment"]
+    names=["read_id", "distance", "strand", "segment"]
     print('Reading long reads segments')
     long_segment = pd.read_csv(path, delimiter = "\t", names=names)
 
@@ -175,7 +175,7 @@ def show_plot(full_data, plotfile):
     read_id = []
     barcodes = []
     distance = []
-
+    print(full_data)
     for key in full_data:
         read_id.append(key)
         find_dict = full_data[key]
@@ -215,18 +215,24 @@ def main():
     long_reads = read_long_reads(args.long_read_segments)
 
     result = run_get_matches(selected_barcode, long_reads, args.max_error, args.barcode_length)
-    show_plot(result, args.plotfile)
+    if args.plotfile != None:
+        show_plot(result, args.plotfile)
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt')
     else:
         outfile = sys.stdout
-    for rid in result:
-        outfile.write(f'{rid}')
+    for rid in sorted(result):
+        outfile.write(f'{long_reads.iloc[rid]["read_id"]}\t')
         for e in range(args.max_error+1):
-            s = ','.join([str(x) for x in result[rid][e]])
-            if s == '': s = '.'
-            outfile.write(f'\t{s}')
-        outfile.write('\n')
+            if len(result[rid][e]) > 0:
+                # s = ','.join([str(x) for x in result[rid][e]])
+                break   
+        if len(result[rid][e]) == 0:
+            e = 'inf'
+        outfile.write(f'{e}\t')
+        outfile.write(f'{len(result[rid][e])}\t')
+        outfile.write(f'{long_reads.iloc[rid]["segment"]}\t')
+        outfile.write(f'{",".join(str(x) for x in sorted(result[rid][e]))}\n')
     outfile.close()
         
 
