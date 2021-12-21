@@ -70,7 +70,7 @@ rule extract_lr_br:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.jpg'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
     threads:
         16
     resources:
@@ -205,14 +205,14 @@ rule get_top_sr_br:
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.sr_select_barcode.jpg'.format(extr_d))
+        plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
     benchmark:
         '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
     resources:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -o {output.tsv}'
+        '{input.script} -i {input.tsv} -o {output.tsv} -p {output.plot}'
 
 rule match_aln:
     input:
@@ -240,14 +240,14 @@ rule match_trie:
         '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_match_distance.jpg'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
     threads:
         1
     resources:
         mem  = "128G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} '#-p {output.plot}'
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot}'
 
 
 rule validate_trie:
@@ -272,9 +272,7 @@ rule validate_trie:
         for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
-            for trie_matches in l[1:]:
-                if trie_matches=='.':
-                    continue
+            for trie_matches in tuple(sorted(l[4].split(','))):
                 assert len(lr[rid])==1, rid
                 trie_matches = tuple(sorted(trie_matches.split(',')))
                 lr[rid].append(trie_matches)

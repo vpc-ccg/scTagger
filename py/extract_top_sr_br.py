@@ -62,15 +62,14 @@ def read_short_reads(path):
         barcodes.append(cb)
     return total,barcodes
 
-def get_barcode_hist(barcode_cnts, step_size, max_barcode_cnt):
-    distribution = list()
-    for idx in range(0, min(max_barcode_cnt,len(barcode_cnts)), step_size):
-        cur_barcode_cnts = barcode_cnts[idx:idx+step_size]
-        distribution.append(
-            sum(cur_barcode_cnts)
-        )        
+def get_barcode_hist(barcode_cnts, total, step_size):
+    remaining = total
+    distribution = {}
+    for idx, x in enumerate(barcode_cnts):
+        if idx % step_size == 0:
+            distribution[idx] = 1 - remaining / total
+        remaining -= x[1]
     return distribution
-
 
 def show_plot(short_read_barcode, distribution, outfile):
     x = []
@@ -112,17 +111,17 @@ def main():
     args = parse_args()
     total, barcodes = read_short_reads(args.input)
     barcode_cnts = Counter(barcodes)
-    barcode_cnts = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)
-    barcodes,barcode_cnts = tuple(zip(*barcode_cnts))
+    barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)
+    barcodes,barcode_cnts = tuple(zip(*barcode_cnts_tuple))
     barcode_hist = get_barcode_hist(
-        barcode_cnts=barcode_cnts,
+        barcode_cnts=barcode_cnts_tuple,
         step_size=args.step_size,
-        max_barcode_cnt=args.max_barcode_cnt,
+        total=total,
     )
     if args.plotfile != None:
         show_plot(
-            total=total,
-            distribution=distribution,
+            short_read_barcode=barcodes,
+            distribution=barcode_hist,
             outfile=args.plotfile,
         )
 
