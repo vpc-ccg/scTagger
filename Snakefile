@@ -23,6 +23,7 @@ fred_d = f'{outpath}/freddie-out'
 seurat_d = f'{outpath}/seurat-out'
 flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
+eval_d = f'{outpath}/evaluation'
 
 for sample in list(config['samples'].keys()):
     for gcsSL in config['gene_cell_seed_sr_lr']:
@@ -347,3 +348,32 @@ rule flames:
         'mkdir -p {params.tmp_in_dir}  && \n'
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
         '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'
+
+rule convert_flames:
+    input:
+        fastq = '{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d),
+    output:
+        tsv = protected('{}/{{sample}}.flames.tsv.gz'.format(eval_d)),
+    run:
+        outfile = gzip.open(output.tsv, 'wt+')
+        for l in gzip.open(input.fastq,'rt'):
+            if l[0]!='@':
+                continue
+            bc,rname = l.rstrip().split()
+            bc = bc.lstrip('@')
+            rname = rname.split('#')[1]
+            outfile.write(f'{rname}\t{bc}\n')
+        outfile.close()
+
+rule convert_trie:
+    input:
+        lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d),
+    output:
+        tsv = protected('{}/{{sample}}.trie.tsv.gz'.format(eval_d)),
+    run:
+        outfile = gzip.open(output.tsv, 'wt+')
+        for l in gzip.open(input.lr_tsv,'rt'):
+            l = l.rstrip('\n').split('\t')
+            if l[2]=='1':
+                outfile.write(f'{l[0]}\t{l[4]}\n')
+        outfile.close()

@@ -22,6 +22,7 @@ clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
 simu_d = f'{outpath}/simulation'
+eval_d = f'{outpath}/evaluation'
 
 lr_sim_cyc = 3
 lr_sim_eff = 0.75
@@ -426,4 +427,38 @@ rule sequence:
         ' --keep-temp'
         # ' && rm -r {params.tmp}'
 
-
+rule convert_truth:
+    input:
+        pcr_tsv  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
+        cbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
+        lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
+    output:
+        tsv = protected('{}/sim_{{sample}}_{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}.truth.tsv.gz'.format(eval_d)),
+    run:
+        mol_to_rname = dict()
+        for l in open(input.lr_fq):
+            if l[0]!='@':
+                continue
+            l = l.rstrip('\n').split()
+            rname = l[0][1:]
+            mol = l[1].split(',')[0]
+            assert not mol in mol_to_rname
+            mol_to_rname[mol] = rname
+        
+        bcid_to_bc = dict()
+        for l in open(input.cbs_fa):
+            l = l.rstrip('\n')
+            if l[0] == '>':
+                bcid = l[1:]
+            else:
+                bcid_to_bc[bcid] = l
+        
+        outfile = gzip.open(output.tsv, 'wt+')
+        for l in open(input.pcr_tsv):
+            l = l.rstrip('\n').split('\t')[0]
+            if l[0]=='+':
+                mol = l[1:]
+            elif l.startswith('cb_'):
+                bcid = l
+                outfile.write(f'{mol_to_rname[mol]}\t{bcid_to_bc[bcid]}\n')
+        outfile.close()
