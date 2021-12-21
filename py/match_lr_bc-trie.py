@@ -203,7 +203,9 @@ def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_leng
         for i in range(len(segment)):
             if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
                 trie.insert(segment[i:i + barcode_length + max_error], index)
-
+    
+    result.update(trie_search(selected_barcode, trie, max_error))
+    return result
 
 
 def show_plot(full_data, plotfile, max_error):
@@ -251,7 +253,7 @@ def main():
     long_reads = read_long_reads(args.long_read_segments)
     result = run_get_matches_memory(selected_barcode, long_reads,
                                     args.max_error, args.barcode_length,
-                                    args.memory)
+                                    args.max_memory)
 
     memory_useage = psutil.Process().memory_info().rss / (1024 * 1024)
     print("Memory usage: ", memory_useage)
