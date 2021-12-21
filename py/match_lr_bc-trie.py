@@ -168,43 +168,46 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
                 if read_id not in full_result:
                     full_result[read_id] = [set() for _ in range(max_error+1)]
                 full_result[read_id][int(index)].add(key)
+    print(len(long_reads), len(full_result))
     return full_result
 
 
-def show_plot(full_data, plotfile):
+def show_plot(full_data, plotfile, max_error):
     read_id = []
     barcodes = []
     distance = []
-    print(full_data)
+    #print(full_data)
     for key in full_data:
+        #print(key, full_data[key])
         read_id.append(key)
         find_dict = full_data[key]
         tmp_barcodes = []
-        if len(find_dict["0"]) > 0:
-            tmp_barcodes = find_dict["0"]
-            distance.append(0)
-        elif len(find_dict["1"]) > 0:
-            tmp_barcodes = find_dict["1"]
-            distance.append(1)
-        elif len(find_dict["2"]) > 0:
-            tmp_barcodes = find_dict["2"]
-            distance.append(2)
-        else:
+        not_find = True
+        for index in range(max_error + 1):
+            if len(find_dict[index]) > 0:
+                tmp_barcodes = list(find_dict[index])
+                not_find = False
+         #       print(tmp_barcodes)
+                distance.append(index)
+                break
+		#not_find = False
+        if not_find:
             distance.append(-1)
 
         barcodes.append(tmp_barcodes)
-        trie_dataframe = pd.DataFrame({"read_id": read_id, "barcodes": barcodes, "distance": distance})
-        new_data = trie_dataframe.groupby("distance").count()
-        fig = plt.figure()
-        ax = fig.add_subplot(111)
-        width = 0.2
+        #print(barcodes)
+    trie_dataframe = pd.DataFrame({"read_id": read_id, "barcodes": barcodes, "distance": distance})
+    new_data = trie_dataframe.groupby("distance").count()
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    width = 0.2
 
-        new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
+    new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
 
-        ax.set_ylabel('Number of long-reads')
-        ax.set_xlabel("Edit distance")
+    ax.set_ylabel('Number of long-reads')
+    ax.set_xlabel("Edit distance")
 
-        plt.savefig(plotfile)
+    plt.savefig(plotfile)
 
 
 def main():
@@ -215,8 +218,9 @@ def main():
     long_reads = read_long_reads(args.long_read_segments)
 
     result = run_get_matches(selected_barcode, long_reads, args.max_error, args.barcode_length)
+    #print(result)
     if args.plotfile != None:
-        show_plot(result, args.plotfile)
+        show_plot(result, args.plotfile, args.max_error)
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt')
     else:
