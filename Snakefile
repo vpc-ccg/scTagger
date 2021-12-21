@@ -46,7 +46,7 @@ rule all:
     input:
         expand('{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.tsv.gz'.format(extr_d), sample=config['samples']),
+        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.txt'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
@@ -70,14 +70,14 @@ rule extract_lr_br:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
+        # plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
     threads:
         16
     resources:
         mem  = "256G",
         time = 59,
     shell:
-        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
+        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} '#-p {output.plot}'
 
 rule minimap2:
     input:
@@ -205,14 +205,14 @@ rule get_top_sr_br:
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
+        # plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
     benchmark:
         '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
     resources:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -o {output.tsv} -p {output.plot}'
+        '{input.script} -i {input.tsv} -o {output.tsv} '#-p {output.plot}'
 
 rule match_aln:
     input:
@@ -240,14 +240,14 @@ rule match_trie:
         '{}/match_trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
-        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
+        # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
     threads:
         1
     resources:
         mem  = "128G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot}'
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'#-p {output.plot}'
 
 
 rule validate_trie:
@@ -255,7 +255,7 @@ rule validate_trie:
         lr_aln_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
         lr_trie_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d),
     output:
-        check = '{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.tsv.gz'.format(extr_d),
+        check = '{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.txt'.format(extr_d),
     threads:
         1
     resources:
@@ -263,22 +263,30 @@ rule validate_trie:
         time = 60*6-1,
     run:
         lr = dict()
+        stats = dict(
+            matches = 0,
+            mismatch = 0,
+            skipped = 0,
+        )
         for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
             aln_matches = tuple(sorted(l[4].split(',')))
             assert not rid in lr, rid
-            lr[rid] = [aln_matches]
+            lr[rid] = aln_matches
         for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
-            for trie_matches in tuple(sorted(l[4].split(','))):
-                assert len(lr[rid])==1, rid
-                trie_matches = tuple(sorted(trie_matches.split(',')))
-                lr[rid].append(trie_matches)
-                break             
-        for am,tm in lr.values():
-            assert am==tm
+            trie_matches = tuple(sorted(l[4].split(',')))
+            if lr[rid] == trie_matches:
+                stats['matches']+=1
+            else:
+                stats['mismatch']+=1
+        stats['skipped'] = len(lr) - stats['matches'] - stats['mismatch']
+        outfile = open(output.check, 'w+')
+        for k,v in stats.items():
+            outfile.write(f'{k}: {v}\n')
+        outfile.close()
         
 rule cell_ranger_count:
     input:
