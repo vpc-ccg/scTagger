@@ -42,6 +42,14 @@ for sample in list(config['samples'].keys()):
         )
     del config['samples'][sample]
 
+rev_compl_l = [chr(i) for i in range(128)]
+rev_compl_l[ord('A')] = 'T'
+rev_compl_l[ord('C')] = 'G'
+rev_compl_l[ord('G')] = 'C'
+rev_compl_l[ord('T')] = 'A'
+
+def rev_compl(s):
+    return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
 rule all:
     input:
@@ -376,4 +384,50 @@ rule convert_trie:
             l = l.rstrip('\n').split('\t')
             if l[2]=='1':
                 outfile.write(f'{l[0]}\t{l[4]}\n')
+        outfile.close()
+
+rule convert_alns:
+    input:
+        lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
+    output:
+        tsv = protected('{}/{{sample}}.alns.tsv.gz'.format(eval_d)),
+    run:
+        outfile = gzip.open(output.tsv, 'wt+')
+        for l in gzip.open(input.lr_tsv,'rt'):
+            l = l.rstrip('\n').split('\t')
+            if l[2]=='1':
+                outfile.write(f'{l[0]}\t{l[4]}\n')
+        outfile.close()
+
+rule evaluate:
+    input:
+        truth_tsv = '{}/{{sample}}.truth.tsv.gz'.format(eval_d),
+        tool_tsv = '{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d),
+    output:
+        stats = protected('{}/{{sample}}.{{tool}}.stats'.format(eval_d)),
+    wildcard_constraints:
+        sample = 'sim_.+',
+        tool = '|'.join([re.escape(s) for s in ['flames','trie','alns']])
+    run:
+        stats = dict(
+            matches = 0,
+            mismatch = 0,
+            skipped = 0,
+        )
+        rname_to_bc = dict()
+        for l in gzip.open(input.truth_tsv, 'rt'):
+            rname,bc = l.rstrip('\n').split('\t')
+            assert not rname in rname_to_bc, (rname, l) 
+            rname_to_bc[rname] = bc
+        for l in gzip.open(input.tool_tsv, 'rt'):
+            rname,bc = l.rstrip('\n').split('\t')
+            assert rname in rname_to_bc, (rname,l)
+            if bc==rname_to_bc[rname] or rev_compl(bc)==rname_to_bc[rname]:
+                stats['matches'] += 1
+            else:
+                stats['mismatch'] += 1
+        stats['skipped'] = len(rname_to_bc) - stats['matches'] - stats['mismatch']
+        outfile = open(output.stats, 'w+')
+        for k,v in stats.items():
+            outfile.write(f'{k}:\t{v}\t({v/len(rname_to_bc):.2%})\n')
         outfile.close()
