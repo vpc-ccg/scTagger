@@ -8,6 +8,7 @@ import pandas as pd
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
+import psutil
 
 
 
@@ -29,6 +30,11 @@ def parse_args():
                         default=2,
                         type=int,
                         help="Number of maximum error for barcode matching. Default: 22")
+    parser.add_argument("-m",
+                        "--max-memory",
+                        default=1e10,
+                        type=int,
+                        help="Number of maximum memory that can use.")
     parser.add_argument("-bl",
                         "--barcode-length",
                         default=16,
@@ -136,6 +142,30 @@ rev_compl_l[ord('T')] = 'A'
 def rev_compl(s):
     return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
+def trie_search(barcodes, trie, max_error):
+    all_barcode = set()
+
+    for index, row in barcodes.iterrows():
+        b = row['barcode']
+        all_barcode.add(b)
+        all_barcode.add(rev_compl(b))
+
+    print('all_barcode')
+    result = {}
+
+    for b in tqdm(all_barcode):
+        result[b] = trie.query(b)
+
+    full_result = {}
+    print('result')
+    for key in tqdm(result):
+        for index in result[key]:
+            for read_id in result[key][index]:
+                if read_id not in full_result:
+                    full_result[read_id] = [set() for _ in range(max_error+1)]
+                full_result[read_id][int(index)].add(key)
+    return full_result
+
 def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
     trie = Trie(max_error, barcode_length)
 
@@ -148,37 +178,41 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
             if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
                 trie.insert(segment[i:i + barcode_length + max_error], index)
 
+    return trie_search(selected_barcode, trie, max_error)
+
+
+def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_length, memory):
+
+    trie = Trie(max_error, barcode_length)
     result = {}
-    all_barcode = set()
+    print('Building trie')
+    for index, row in tqdm(long_reads.iterrows(), total=long_reads.shape[0]):
+        segment = row["segment"]
 
-    for index, row in selected_barcode.iterrows():
-        b = row['barcode']
-        all_barcode.add(b)
-        all_barcode.add(rev_compl(b))
+        if type(segment)!=str and math.isnan(segment):
+            continue
 
-    print('all_barcode')
-    for b in tqdm(all_barcode):
-        result[b] = trie.query(b)
+        memory_useage = psutil.Process().memory_info().rss / (1024 * 1024)
+        if memory < memory_useage * 1.1:
+            print("Try to remove memory")
 
-    full_result = {}
-    print('result')
-    for key in tqdm(result):
-        for index in result[key]:
-            for read_id in result[key][index]:
-                if read_id not in full_result:
-                    full_result[read_id] = [set() for _ in range(max_error+1)]
-                full_result[read_id][int(index)].add(key)
-    print(len(long_reads), len(full_result))
-    return full_result
+            result.update(trie_search(selected_barcode, trie, max_error))
+            del trie
+            trie = Trie(max_error, barcode_length)
+
+        for i in range(len(segment)):
+            if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
+                trie.insert(segment[i:i + barcode_length + max_error], index)
+
 
 
 def show_plot(full_data, plotfile, max_error):
     read_id = []
     barcodes = []
     distance = []
-    #print(full_data)
+
     for key in full_data:
-        #print(key, full_data[key])
+
         read_id.append(key)
         find_dict = full_data[key]
         tmp_barcodes = []
@@ -187,15 +221,14 @@ def show_plot(full_data, plotfile, max_error):
             if len(find_dict[index]) > 0:
                 tmp_barcodes = list(find_dict[index])
                 not_find = False
-         #       print(tmp_barcodes)
                 distance.append(index)
                 break
-		#not_find = False
+
         if not_find:
             distance.append(-1)
 
         barcodes.append(tmp_barcodes)
-        #print(barcodes)
+
     trie_dataframe = pd.DataFrame({"read_id": read_id, "barcodes": barcodes, "distance": distance})
     new_data = trie_dataframe.groupby("distance").count()
     fig = plt.figure()
@@ -216,9 +249,12 @@ def main():
 
     selected_barcode = read_short_reads(args.short_read_barcodes)
     long_reads = read_long_reads(args.long_read_segments)
+    result = run_get_matches_memory(selected_barcode, long_reads,
+                                    args.max_error, args.barcode_length,
+                                    args.memory)
 
-    result = run_get_matches(selected_barcode, long_reads, args.max_error, args.barcode_length)
-    #print(result)
+    memory_useage = psutil.Process().memory_info().rss / (1024 * 1024)
+    print("Memory usage: ", memory_useage)
     if args.plotfile != None:
         show_plot(result, args.plotfile, args.max_error)
     if args.outfile:
