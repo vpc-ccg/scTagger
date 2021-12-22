@@ -9,6 +9,7 @@ import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import psutil
+from multiprocessing import Pool
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -38,6 +39,11 @@ def parse_args():
                         default=16,
                         type=int,
                         help="Length of barcodes. Default: 16")
+    parser.add_argument("-t",
+                        "--threads",
+                        default=16,
+                        type=int,
+                        help="Number of threads to use for searching. Default: 16")
     parser.add_argument("-p",
                         "--plotfile",
                         default=None,
@@ -68,6 +74,8 @@ rev_compl_l[ord('C')] = 'G'
 rev_compl_l[ord('G')] = 'C'
 rev_compl_l[ord('T')] = 'A'
 
+trie = None
+barcodes = None
 def rev_compl(s):
     return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
@@ -151,33 +159,36 @@ def read_long_reads(path):
 
 def read_short_reads(path):
     print('Reading short reads barcodes')
-    barcodes = list()
+    global barcodes
     if path.endswith('.gz'):
         f = gzip.open(path, 'rt')
     else:
         f = open(path)
     barcodes = [l.rstrip().split('\t')[0] for l in f]
     print(f'There {len(barcodes)} SR barcodes')
-    return barcodes
 
-def trie_search(trie, barcodes, read_total):
+def trie_run_query(bid):
+    result = list()
+    for e,rids in enumerate(trie.query(barcodes[bid])):
+        result.append((e,True,rids))
+    for e,rids in enumerate(trie.query(rev_compl(barcodes[bid]))):
+        result.append((e,False,rids))
+    return bid,result
+
+def trie_search(read_total, threads):
     result = [(100,set()) for _ in range(read_total)]
-    for bid,b in tqdm(enumerate(barcodes), total=len(barcodes)):
-        for e,rids in enumerate(trie.query(b)):
-            for rid in rids:
-                if result[rid][0] > e:
-                    result[rid] = (e,set())
-                if result[rid][0] == e:
-                    result[rid][1].add((bid,True))
-        for e,rids in enumerate(trie.query(rev_compl(b))):
-            for rid in rids:
-                if result[rid][0] > e:
-                    result[rid] = (e,set())
-                if result[rid][0] == e:
-                    result[rid][1].add((bid,False))
+    with Pool(threads) as p:
+        for bid,X in tqdm(p.imap(trie_run_query, range(len(barcodes))), total=len(barcodes)):
+            for (e,strand,rids) in X:
+                for rid in rids:
+                    if result[rid][0] > e:
+                        result[rid] = (e,set())
+                    if result[rid][0] == e:
+                        result[rid][1].add((bid,strand))
     return result
 
-def run_get_matches_memory(barcodes, long_reads, max_error, barcode_length, memory_GB):
+def run_get_matches_memory(long_reads, max_error, barcode_length, memory_GB, threads):
+    global trie
     trie = Trie(max_error, barcode_length)
     result = {}
     print('Building trie')
@@ -189,7 +200,7 @@ def run_get_matches_memory(barcodes, long_reads, max_error, barcode_length, memo
             if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
                 trie.insert(segment[i:i + barcode_length + max_error], index)
     print(f'Memory use: {psutil.Process().memory_info().rss / (1024**3):.2f}GB')
-    result = trie_search(trie, barcodes, long_reads.shape[0])
+    result = trie_search(long_reads.shape[0], threads)
     del trie
     print(f'Memory use: {psutil.Process().memory_info().rss / (1024**3):.2f}GB')
     return result
@@ -235,15 +246,15 @@ def show_plot(full_data, plotfile, max_error):
 def main():
     args = parse_args()
     print(args)
-
-    barcodes = read_short_reads(args.short_read_barcodes)
+    global barcodes
+    read_short_reads(args.short_read_barcodes)
     long_reads = read_long_reads(args.long_read_segments)
     result = run_get_matches_memory(
-        barcodes=barcodes,
         long_reads=long_reads,
         max_error=args.max_error,
         barcode_length=args.barcode_length,
         memory_GB=args.mem,
+        threads=args.threads,
     )
     memory_useage_GB = psutil.Process().memory_info().rss / (1024**3)
     print(f"Memory usage: {memory_useage_GB:.2f}GB")
