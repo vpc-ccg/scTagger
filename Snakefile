@@ -26,6 +26,7 @@ simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
 
 for sample in list(config['samples'].keys()):
+    break
     for gcsSL in config['gene_cell_seed_sr_lr']:
         k = f'sim_{sample}_{gcsSL}'
         config['samples'][k] = dict(
@@ -40,7 +41,7 @@ for sample in list(config['samples'].keys()):
             cell_count = int(gcsSL.split('-')[1]),
             seurat_config = config['samples'][sample]['seurat_config'],
         )
-    del config['samples'][sample]
+    # del config['samples'][sample]
 
 rev_compl_l = [chr(i) for i in range(128)]
 rev_compl_l[ord('A')] = 'T'
@@ -63,6 +64,7 @@ rule all:
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d), sample=config['samples']),
+        expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=['flames', 'alns', 'trie']),
         # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
@@ -79,14 +81,14 @@ rule extract_lr_br:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
     threads:
-        16
+        32
     resources:
         mem  = "256G",
         time = 59,
     shell:
-        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} '#-p {output.plot}'
+        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
 
 rule minimap2:
     input:
@@ -208,20 +210,20 @@ rule extract_sr_br:
             outfile.write(f'{qname}\t{C}\t{U}\n')
         outfile.close()
 
-rule get_top_sr_br:
+rule filter_bc:
     input:
         script = config['exec']['select'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
     benchmark:
-        '{}/get_top_sr_br/{{sample}}.txt'.format(bnch_d)
+        '{}/filter_bc/{{sample}}.txt'.format(bnch_d)
     resources:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -o {output.tsv} '#-p {output.plot}'
+        '{input.script} -i {input.tsv} -o {output.tsv} -p {output.plot}'
 
 rule match_aln:
     input:
@@ -229,7 +231,7 @@ rule match_aln:
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
     benchmark:
-        '{}/match_aln/{{sample}}.txt'.format(bnch_d)
+        '{}/alns/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d)),
     threads:
@@ -246,17 +248,19 @@ rule match_trie:
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
     benchmark:
-        '{}/match_trie/{{sample}}.txt'.format(bnch_d)
+        '{}/trie/{{sample}}.txt'.format(bnch_d)
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
+        plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
     threads:
         1
+    params:
+        mem  = 64,
     resources:
-        mem  = "128G",
+        mem  = "64G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv}'#-p {output.plot}'
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -p {output.plot} -m {params.mem}'
 
 
 rule validate_trie:
@@ -349,6 +353,8 @@ rule flames:
     params:
         tmp_in_dir = '{}/{{sample}}_fastq'.format(flames_d),
         edit_dist = 4,
+    benchmark:
+        '{}/flames/{{sample}}.txt'.format(bnch_d)
     conda:
         'envs/flames.yml'
     shell:

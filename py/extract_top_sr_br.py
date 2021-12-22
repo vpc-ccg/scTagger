@@ -80,9 +80,6 @@ def show_plot(distribution, step_size, last_idx, outfile):
     y2 = [distribution[idx]*100 for idx in x]
     for idx in range(1, len(y2)):
         y2[idx] = y1[idx] - y1[idx-1] 
-    # x = x[1:]
-    # y1 = y1[1:]    
-    # y2 = y2[1:]
     fig = plt.figure(figsize=(10,5))
     fig.suptitle(f'SR coverage with each additional {step_size} unique barcodes')
     ax1 = fig.add_subplot(111)
@@ -99,11 +96,8 @@ def show_plot(distribution, step_size, last_idx, outfile):
     plot_lines.extend(
         ax2.plot(x, y2, color='#d95f02', label=f'Coverage (right y-axis)')
     )
-    # ax1.set_ylabel('Cumulative % (red)')
-    # ax1.set_xlabel('Unique barcodes (sorted from most frequent)')
     ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
     ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
-    # ax2.set_ylabel(f'% coverage (blue)')
     plot_lines.extend(
         ax2.plot([last_idx,last_idx], [min(y2), max(y2)], color='#7570b3', label='Selected barcodes',ls='dashed')
     )

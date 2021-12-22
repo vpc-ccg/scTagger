@@ -57,6 +57,11 @@ rule all:
                 'long-reads.fastq',
             ]
         ),
+        expand(
+            '{}/sim_{{sample}}_{{gcsSL}}.truth.tsv.gz'.format(eval_d),
+            sample = config['samples'],
+            gcsSL = config['gene_cell_seed_sr_lr'],
+        ),
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
 
