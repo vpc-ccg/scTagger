@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from math import ceil
 import sys
 import argparse
 import gzip
@@ -39,8 +40,8 @@ def parse_args():
                         help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
     parser.add_argument("--max-barcode-cnt",
                         type=int,
-                        default=50_000,
-                        help="Max number of barcodes to keep. Default: 50,000")
+                        default=25_000,
+                        help="Max number of barcodes to keep. Default: 25000")
     args = parser.parse_args()
     assert 0 <= args.thresh <= 1
     assert 0 < args.step_size 
@@ -65,75 +66,81 @@ def read_short_reads(path):
 def get_barcode_hist(barcode_cnts, total, step_size):
     remaining = total
     distribution = {}
-    for idx, x in enumerate(barcode_cnts):
+    for idx, x in enumerate(barcode_cnts, start=1):
         if idx % step_size == 0:
             distribution[idx] = 1 - remaining / total
         remaining -= x[1]
+    if not idx % step_size == 0:
+        distribution[idx] = 1 - remaining / total
     return distribution
 
-def show_plot(short_read_barcode, distribution, outfile):
-    x = []
-    y1 = []
-    y2 = []
-    start = 0
+def show_plot(distribution, step_size, last_idx, outfile):
+    x = sorted(distribution.keys())
+    y1 = [distribution[idx]*100 for idx in x]
+    y2 = [distribution[idx]*100 for idx in x]
+    for idx in range(1, len(y2)):
+        y2[idx] = y1[idx] - y1[idx-1] 
+    # x = x[1:]
+    # y1 = y1[1:]    
+    # y2 = y2[1:]
+    fig = plt.figure(figsize=(10,5))
+    fig.suptitle(f'SR coverage with each additional {step_size} unique barcodes')
+    ax1 = fig.add_subplot(111)
+    plt.xticks(
+        range(step_size, max(x), step_size*ceil(max(x)/step_size/18)),
+        rotation=45,
+    )
+    ax2 = ax1.twinx()
 
-    total = len(short_read_barcode)
-    for key in distribution:
-        x.append(key)
-        y1.append(total - ((1 - distribution[key]) * total))
-        y2.append(distribution[key] - start)
-        start = distribution[key]
-
-    df = pd.DataFrame({'cumulative': y1,
-                       'Change': y2}, index=x)
-    df["cumulative"] = df["cumulative"] / total * 100
-    df["Change"] = df["Change"] * 100
-    df = df.drop(labels=0, axis=0)
-
-
-    fig = plt.figure()
-
-    ax = fig.add_subplot(111)
-    ax2 = ax.twinx()
-
-    df.cumulative.plot(kind='line', color='red', ax=ax)
-    df.Change.plot(kind='line', color='blue', ax=ax2)
-
-    ax.set_ylabel('Percentage of cumulative reads cover')
-    ax.set_xlabel("Selected barcode")
+    plot_lines = list()
+    plot_lines.extend(
+        ax1.plot(x, y1, color='#1b9e77', label='Cumulative % coverage (left y-axis)')
+    )
+    plot_lines.extend(
+        ax2.plot(x, y2, color='#d95f02', label=f'Coverage (right y-axis)')
+    )
+    # ax1.set_ylabel('Cumulative % (red)')
+    # ax1.set_xlabel('Unique barcodes (sorted from most frequent)')
     ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
-    ax.yaxis.set_major_formatter(mtick.PercentFormatter())
-    ax2.set_ylabel('Percentage of cover change in reads')
-
+    ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
+    # ax2.set_ylabel(f'% coverage (blue)')
+    plot_lines.extend(
+        ax2.plot([last_idx,last_idx], [min(y2), max(y2)], color='#7570b3', label='Selected barcodes',ls='dashed')
+    )
+    plt.legend(plot_lines, [l.get_label() for l in plot_lines], loc='center right')
     plt.savefig(outfile)
 
 def main():
     args = parse_args()
     total, barcodes = read_short_reads(args.input)
     barcode_cnts = Counter(barcodes)
-    barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)
+    barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
     barcodes,barcode_cnts = tuple(zip(*barcode_cnts_tuple))
     barcode_hist = get_barcode_hist(
         barcode_cnts=barcode_cnts_tuple,
         step_size=args.step_size,
         total=total,
     )
-    if args.plotfile != None:
-        show_plot(
-            short_read_barcode=barcodes,
-            distribution=barcode_hist,
-            outfile=args.plotfile,
-        )
 
-    last_idx = args.max_barcode_cnt
-    for idx,c in enumerate(barcode_hist):
-        if c / total < args.thresh:
+    last_idx = len(barcodes)
+    last_f = 0
+    for idx,f in sorted(barcode_hist.items()):
+        if idx == 0:
+            continue
+        if f-last_f < args.thresh:
             last_idx = min(
-                (idx+1) * args.step_size,
-                args.max_barcode_cnt,
+                idx,
                 len(barcodes)
             )
             break
+        last_f = f
+    if args.plotfile != None:
+        show_plot(
+            distribution=barcode_hist,
+            step_size=args.step_size,
+            last_idx=last_idx,
+            outfile=args.plotfile,
+        )
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt+')
     else:
