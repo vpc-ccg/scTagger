@@ -10,8 +10,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 import psutil
 
-
-
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Extract long-read barcodes using short-read adapter alignment")
@@ -29,12 +27,12 @@ def parse_args():
                         "--max-error",
                         default=2,
                         type=int,
-                        help="Number of maximum error for barcode matching. Default: 22")
+                        help="Maximum number of errors allowed for barcode matching. Default: 2")
     parser.add_argument("-m",
-                        "--max-memory",
-                        default=1e10,
-                        type=int,
-                        help="Number of maximum memory that can use.")
+                        "--mem",
+                        default=16.0,
+                        type=float,
+                        help="Maximum number of GB of RAM to be used. Default: 16.0")
     parser.add_argument("-bl",
                         "--barcode-length",
                         default=16,
@@ -51,13 +49,17 @@ def parse_args():
                         default=None,
                         help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
     args = parser.parse_args()
+    assert args.mem > 0
+    assert args.barcode_length > 0
+    assert args.barcode_length > args.max_error >= 0
+    
     return args
 
 class TrieNode:
     """A node in the trie structure"""
 
     def __init__(self):
-        self.reads = set()
+        self.reads = list()
         self.children = {}
 
 
@@ -70,16 +72,12 @@ class Trie(object):
 
     def insert(self, word, read_id):
         node = self.root
-
         for index, char in enumerate(word):
-            if char in node.children:
-                node = node.children[char]
-            else:
-                new_node = TrieNode()
-                node.children[char] = new_node
-                node = new_node
+            if not char in node.children:
+                node.children[char] = TrieNode()
+            node = node.children[char]
             if index >= self.barcode_length - self.max_error - 1:
-                node.reads.add(read_id)
+                node.reads.append(read_id)
 
     def dfs(self, node, barcode, error, index):
         if index == len(barcode):
@@ -90,32 +88,25 @@ class Trie(object):
         if error > 0:
             self.dfs(node, barcode, error - 1, index + 1)
         for char, child in node.children.items():
-
             # dont change
             if char == barcode[index]:
                 self.dfs(child, barcode, error, index + 1)
-
             # mutation
             if char != barcode[index] and error > 0:
                 self.dfs(child, barcode, error - 1, index + 1)
-
             # insert
             if error > 0:
                 self.dfs(child, barcode, error - 1, index)
 
     def query(self, x):
-
         node = self.root
-
         self.output = {}
         for i in range(self.max_error + 1):
             self.output[i] = set()
-
         self.dfs(node, x, self.max_error, 0)
         for i in range(0, self.max_error):
             for j in range(i + 1, self.max_error + 1):
                 self.output[j] -= self.output[i]
-
         return self.output
 
 def read_long_reads(path):
@@ -181,8 +172,7 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
     return trie_search(selected_barcode, trie, max_error)
 
 
-def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_length, memory):
-
+def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_length, memory_GB):
     trie = Trie(max_error, barcode_length)
     result = {}
     print('Building trie')
@@ -192,12 +182,14 @@ def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_leng
         if type(segment)!=str and math.isnan(segment):
             continue
 
-        memory_useage = psutil.Process().memory_info().rss / (1024 * 1024)
-        if memory < memory_useage * 1.1:
-            print("Try to remove memory")
+        memory_useage_GB = psutil.Process().memory_info().rss / (1024**3)
+        if memory_GB < memory_useage_GB * 1.1:
+            print("\nMemory peaked. Querying the barcodes on trie...")
 
             result.update(trie_search(selected_barcode, trie, max_error))
+            print("\nDeleting trie...")
             del trie
+            print("\nDeleted trie")
             trie = Trie(max_error, barcode_length)
 
         for i in range(len(segment)):
@@ -251,12 +243,16 @@ def main():
 
     selected_barcode = read_short_reads(args.short_read_barcodes)
     long_reads = read_long_reads(args.long_read_segments)
-    result = run_get_matches_memory(selected_barcode, long_reads,
-                                    args.max_error, args.barcode_length,
-                                    args.max_memory)
+    result = run_get_matches_memory(
+        selected_barcode=selected_barcode,
+        long_reads=long_reads,
+        max_error=args.max_error,
+        barcode_length=args.barcode_length,
+        memory_GB=args.mem,
+    )
 
-    memory_useage = psutil.Process().memory_info().rss / (1024 * 1024)
-    print("Memory usage: ", memory_useage)
+    memory_useage_GB = psutil.Process().memory_info().rss / (1024**3)
+    print(f"Memory usage: {memory_useage_GB:.2f}GB")
     if args.plotfile != None:
         show_plot(result, args.plotfile, args.max_error)
     if args.outfile:
