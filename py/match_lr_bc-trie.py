@@ -55,59 +55,91 @@ def parse_args():
     
     return args
 
-class TrieNode:
-    """A node in the trie structure"""
+map_char = [None for i in range(128)]
+map_char[ord('A')] = 0
+map_char[ord('C')] = 1
+map_char[ord('G')] = 2
+map_char[ord('T')] = 3
+map_char[ord('N')] = 4
 
-    def __init__(self):
-        self.reads = list()
-        self.children = {}
+rev_compl_l = [chr(i) for i in range(128)]
+rev_compl_l[ord('A')] = 'T'
+rev_compl_l[ord('C')] = 'G'
+rev_compl_l[ord('G')] = 'C'
+rev_compl_l[ord('T')] = 'A'
 
+def rev_compl(s):
+    return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
 
 class Trie(object):
 
-    def __init__(self, max_error, barcode_length):
-        self.root = TrieNode()
+    def __init__(self, max_error, barcode_length, capacity=100_000_000):
+        self.nid_to_rids = [list()]
+        self.nid_to_child = np.zeros(
+            (5,capacity),
+            dtype=np.uint32,
+        )
+        self.size = 1
         self.max_error = max_error
         self.barcode_length = barcode_length
 
-    def insert(self, word, read_id):
-        node = self.root
-        for index, char in enumerate(word):
-            if not char in node.children:
-                node.children[char] = TrieNode()
-            node = node.children[char]
-            if index >= self.barcode_length - self.max_error - 1:
-                node.reads.append(read_id)
+    def __increase_capacity__(self):
+        new_capacity = self.nid_to_child.shape[1]*2
+        print(f'Increasing trie capacity to {new_capacity}')
+        self.nid_to_child.resize(
+            (5,new_capacity),
+        )
 
-    def dfs(self, node, barcode, error, index):
+    def insert(self, word, read_id):
+        nid = 0
+        for index, char in enumerate(word):
+            cid = map_char[ord(char)]
+            # Needs to create node
+            if self.nid_to_child[cid][nid] == 0:
+                new_nid = self.size
+                self.size += 1
+                if self.size >= self.nid_to_child.shape[1]:
+                    self.__increase_capacity__()
+                self.nid_to_child[cid][nid] = new_nid
+                self.nid_to_rids.append(list())
+            nid = self.nid_to_child[cid][nid]
+            if index >= self.barcode_length - self.max_error - 1:
+                self.nid_to_rids[nid].append(read_id)
+
+    def dfs(self, nid, barcode, error, index, result):
         if index == len(barcode):
             edit_distance = self.max_error - error
-            self.output[edit_distance].update(node.reads)
+            result[edit_distance].extend(
+                self.nid_to_rids[nid]
+            )
             return
         # delete
         if error > 0:
-            self.dfs(node, barcode, error - 1, index + 1)
-        for char, child in node.children.items():
+            self.dfs(nid, barcode, error - 1, index + 1, result)
+        for cid in range(5):
+            child_id = self.nid_to_child[cid][nid]
+            if child_id == 0:
+                continue
             # dont change
-            if char == barcode[index]:
-                self.dfs(child, barcode, error, index + 1)
+            if cid == map_char[ord(barcode[index])]:
+                self.dfs(child_id, barcode, error, index + 1, result)
             # mutation
-            if char != barcode[index] and error > 0:
-                self.dfs(child, barcode, error - 1, index + 1)
+            if cid != map_char[ord(barcode[index])] and error > 0:
+                self.dfs(child_id, barcode, error - 1, index + 1, result)
             # insert
             if error > 0:
-                self.dfs(child, barcode, error - 1, index)
+                self.dfs(child_id, barcode, error - 1, index, result)
 
-    def query(self, x):
-        node = self.root
-        self.output = {}
-        for i in range(self.max_error + 1):
-            self.output[i] = set()
-        self.dfs(node, x, self.max_error, 0)
-        for i in range(0, self.max_error):
-            for j in range(i + 1, self.max_error + 1):
-                self.output[j] -= self.output[i]
-        return self.output
+    def query(self, barcode):
+        result = [list() for _ in range(self.max_error+1)]
+        self.dfs(
+            nid=0, 
+            barcode = barcode, 
+            error = self.max_error,
+            index = 0,
+            result = result,
+        )
+        return result
 
 def read_long_reads(path):
 
@@ -119,47 +151,35 @@ def read_long_reads(path):
 
 def read_short_reads(path):
     print('Reading short reads barcodes')
-    names=["barcode", "frequency"]
-    selected_barcode = pd.read_csv(path, delimiter = "\t", names=names)
-    print(f'There {selected_barcode.shape[0]} SR barcodes')
-    return selected_barcode
+    barcodes = list()
+    if path.endswith('.gz'):
+        f = gzip.open(path, 'rt')
+    else:
+        f = open(path)
+    barcodes = [l.rstrip().split('\t')[0] for l in f]
+    print(f'There {len(barcodes)} SR barcodes')
+    return barcodes
 
-rev_compl_l = [chr(i) for i in range(128)]
-rev_compl_l[ord('A')] = 'T'
-rev_compl_l[ord('C')] = 'G'
-rev_compl_l[ord('G')] = 'C'
-rev_compl_l[ord('T')] = 'A'
+def trie_search(trie, barcodes, read_total):
+    result = [(100,set()) for _ in range(read_total)]
+    for bid,b in tqdm(enumerate(barcodes), total=len(barcodes)):
+        for e,rids in enumerate(trie.query(b)):
+            for rid in rids:
+                if result[rid][0] > e:
+                    result[rid] = (e,set())
+                if result[rid][0] == e:
+                    result[rid][1].add((bid,True))
+        for e,rids in enumerate(trie.query(rev_compl(b))):
+            for rid in rids:
+                if result[rid][0] > e:
+                    result[rid] = (e,set())
+                if result[rid][0] == e:
+                    result[rid][1].add((bid,False))
+    return result
 
-def rev_compl(s):
-    return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
-
-def trie_search(barcodes, trie, max_error):
-    all_barcode = set()
-
-    for index, row in barcodes.iterrows():
-        b = row['barcode']
-        all_barcode.add(b)
-        all_barcode.add(rev_compl(b))
-
-    print('all_barcode')
-    result = {}
-
-    for b in tqdm(all_barcode):
-        result[b] = trie.query(b)
-
-    full_result = {}
-    print('result')
-    for key in tqdm(result):
-        for index in result[key]:
-            for read_id in result[key][index]:
-                if read_id not in full_result:
-                    full_result[read_id] = [set() for _ in range(max_error+1)]
-                full_result[read_id][int(index)].add(key)
-    return full_result
-
-def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
+def run_get_matches_memory(barcodes, long_reads, max_error, barcode_length, memory_GB):
     trie = Trie(max_error, barcode_length)
-
+    result = {}
     print('Building trie')
     for index, row in tqdm(long_reads.iterrows(), total=long_reads.shape[0]):
         segment = row["segment"]
@@ -168,35 +188,10 @@ def run_get_matches(selected_barcode, long_reads, max_error, barcode_length):
         for i in range(len(segment)):
             if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
                 trie.insert(segment[i:i + barcode_length + max_error], index)
-
-    return trie_search(selected_barcode, trie, max_error)
-
-
-def run_get_matches_memory(selected_barcode, long_reads, max_error, barcode_length, memory_GB):
-    trie = Trie(max_error, barcode_length)
-    result = {}
-    print('Building trie')
-    for index, row in tqdm(long_reads.iterrows(), total=long_reads.shape[0]):
-        segment = row["segment"]
-
-        if type(segment)!=str and math.isnan(segment):
-            continue
-
-        memory_useage_GB = psutil.Process().memory_info().rss / (1024**3)
-        if memory_GB < memory_useage_GB * 1.1:
-            print("\nMemory peaked. Querying the barcodes on trie...")
-
-            result.update(trie_search(selected_barcode, trie, max_error))
-            print("\nDeleting trie...")
-            del trie
-            print("\nDeleted trie")
-            trie = Trie(max_error, barcode_length)
-
-        for i in range(len(segment)):
-            if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
-                trie.insert(segment[i:i + barcode_length + max_error], index)
-    
-    result.update(trie_search(selected_barcode, trie, max_error))
+    print(f'Memory use: {psutil.Process().memory_info().rss / (1024**3):.2f}GB')
+    result = trie_search(trie, barcodes, long_reads.shape[0])
+    del trie
+    print(f'Memory use: {psutil.Process().memory_info().rss / (1024**3):.2f}GB')
     return result
 
 
@@ -241,38 +236,35 @@ def main():
     args = parse_args()
     print(args)
 
-    selected_barcode = read_short_reads(args.short_read_barcodes)
+    barcodes = read_short_reads(args.short_read_barcodes)
     long_reads = read_long_reads(args.long_read_segments)
     result = run_get_matches_memory(
-        selected_barcode=selected_barcode,
+        barcodes=barcodes,
         long_reads=long_reads,
         max_error=args.max_error,
         barcode_length=args.barcode_length,
         memory_GB=args.mem,
     )
-
     memory_useage_GB = psutil.Process().memory_info().rss / (1024**3)
     print(f"Memory usage: {memory_useage_GB:.2f}GB")
-    if args.plotfile != None:
-        show_plot(result, args.plotfile, args.max_error)
+    # if args.plotfile != None:
+    #     show_plot(result, args.plotfile, args.max_error)
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt')
     else:
         outfile = sys.stdout
-    for rid in sorted(result):
+    for rid,(e,bids) in enumerate(result):
+        segment = long_reads.iloc[rid]["segment"]
+        if type(segment)!=str and math.isnan(segment):
+            continue
         outfile.write(f'{long_reads.iloc[rid]["read_id"]}\t')
-        for e in range(args.max_error+1):
-            if len(result[rid][e]) > 0:
-                # s = ','.join([str(x) for x in result[rid][e]])
-                break   
-        if len(result[rid][e]) == 0:
+        if len(bids) == 0:
             e = 'inf'
         outfile.write(f'{e}\t')
-        outfile.write(f'{len(result[rid][e])}\t')
-        outfile.write(f'{long_reads.iloc[rid]["segment"]}\t')
-        outfile.write(f'{",".join(str(x) for x in sorted(result[rid][e]))}\n')
+        outfile.write(f'{len(bids)}\t')
+        outfile.write(f'{segment}\t')
+        outfile.write(f'{",".join([barcodes[b] if s else rev_compl(barcodes[b]) for b,s in sorted(bids)])}\n')
     outfile.close()
-        
 
 if __name__ == "__main__":
     main()
