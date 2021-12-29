@@ -92,11 +92,17 @@ class Trie(object):
         self.barcode_length = barcode_length
 
     def __increase_capacity__(self):
-        new_capacity = self.nid_to_child.shape[1]*2
-        print(f'Increasing trie capacity to {new_capacity}')
-        self.nid_to_child.resize(
-            (5,new_capacity),
+        self.nid_to_child = np.concatenate(
+            (
+                self.nid_to_child,
+                np.zeros(
+                    self.nid_to_child.shape,
+                    dtype=np.uint32,
+                )
+            ),
+            axis = 1
         )
+        print(f'Doubled capacity. New shape: {self.nid_to_child.shape}')       
 
     def insert(self, word, read_id):
         nid = 0
@@ -197,8 +203,9 @@ def run_get_matches_memory(long_reads, max_error, barcode_length, memory_GB, thr
         if type(segment)!=str and math.isnan(segment):
             continue
         for i in range(len(segment)):
-            if len(segment[i:i + barcode_length + max_error]) >= barcode_length - max_error:
-                trie.insert(segment[i:i + barcode_length + max_error], index)
+            sub_segment = segment[i:i + barcode_length + max_error]
+            if len(sub_segment) >= barcode_length - max_error:
+                trie.insert(sub_segment, index)
     print(f'Memory use: {psutil.Process().memory_info().rss / (1024**3):.2f}GB')
     result = trie_search(long_reads.shape[0], threads)
     del trie
@@ -264,7 +271,7 @@ def main():
         outfile = gzip.open(args.outfile, 'wt')
     else:
         outfile = sys.stdout
-    for rid,(e,bids) in enumerate(result):
+    for rid,(e,bids) in tqdm(enumerate(result),total=len(result)):
         segment = long_reads.iloc[rid]["segment"]
         if type(segment)!=str and math.isnan(segment):
             continue

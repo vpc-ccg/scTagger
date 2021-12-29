@@ -71,12 +71,26 @@ rule all:
         # expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
         # expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
+rule make_time:
+    output:
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
+    run:
+        outfile = open(output.time, 'w+')
+        record = list()
+        record.append('method')
+        record.append('real')
+        record.append('user')
+        record.append('memory')
+        record.append('threads')
+        outfile.write('\t'.join(record))
+        outfile.write('\n')
+        outfile.close()
+
 rule extract_lr_br:
     input:
         script = config['exec']['split'],
         reads = lambda wildcards: config['samples'][wildcards.sample]['reads'],
-    benchmark:
-        '{}/extract_lr_br/{{sample}}.txt'.format(bnch_d)
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     wildcard_constraints:
         sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
     output:
@@ -88,6 +102,7 @@ rule extract_lr_br:
         mem  = "256G",
         time = 59,
     shell:
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
 
 rule minimap2:
@@ -189,8 +204,6 @@ rule freddie_isoforms:
 rule extract_sr_br:
     input:
         bam = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
-    benchmark:
-        '{}/extract_sr_br/{{sample}}.txt'.format(bnch_d)
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -214,15 +227,15 @@ rule filter_bc:
     input:
         script = config['exec']['select'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
         plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
-    benchmark:
-        '{}/filter_bc/{{sample}}.txt'.format(bnch_d)
     resources:
         mem  = "8G",
         time = 59,
     shell:
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} -i {input.tsv} -o {output.tsv} -p {output.plot}'
 
 rule match_aln:
@@ -230,8 +243,7 @@ rule match_aln:
         script  = config['exec']['match_aln'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
-    benchmark:
-        '{}/alns/{{sample}}.txt'.format(bnch_d)
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d)),
     threads:
@@ -240,6 +252,7 @@ rule match_aln:
         mem  = "250G",
         time = 60*6-1,
     shell:
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -t {threads} -o {output.lr_tsv}'
 
 rule match_trie:
@@ -247,20 +260,18 @@ rule match_trie:
         script  = config['exec']['match_trie'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
-    benchmark:
-        '{}/trie/{{sample}}.txt'.format(bnch_d)
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
         # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
     threads:
-        1
-    params:
-        mem  = 64,
+        32
     resources:
         mem  = "64G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} '#-p {output.plot} -m {params.mem}'
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'#-p {output.plot} -m {params.mem}'
 
 
 rule validate_trie:
@@ -276,35 +287,49 @@ rule validate_trie:
         time = 60*6-1,
     run:
         lr = dict()
-        stats = dict(
-            matches = 0,
-            mismatch = 0,
-            skipped = 0,
-        )
+        # stats = dict(
+        #     matches = 0,
+        #     mismatch = 0,
+        #     error_too_low = 0,
+        #     skipped = 0,
+        # )
         for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
-            aln_matches = tuple(sorted(l[4].split(',')))
+            if l[4] !='':
+                matches = tuple(sorted(l[4].split(',')))
+            else:
+                matches = tuple()
+            assert len(matches) == int(l[2])
             assert not rid in lr, rid
-            lr[rid] = aln_matches
+            lr[rid] = dict(
+                aln=((l[1],matches)),
+                trie=(('inf'),tuple()),
+            )
         for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
-            trie_matches = tuple(sorted(l[4].split(',')))
-            if lr[rid] == trie_matches:
-                stats['matches']+=1
+            if l[4] !='':
+                matches = tuple(sorted(l[4].split(',')))
             else:
-                stats['mismatch']+=1
-        stats['skipped'] = len(lr) - stats['matches'] - stats['mismatch']
+                matches = tuple()
+            assert len(matches) == int(l[2])
+            lr[rid]['trie'] = (l[1],matches)
+        C = Counter(
+            (X['aln']==X['trie'], X['aln'][0], len(X['aln'][1])<2, X['trie'][0], len(X['trie'][1])<2,) for X in lr.values()
+        )
         outfile = open(output.check, 'w+')
-        for k,v in stats.items():
-            outfile.write(f'{k}: {v}\n')
+        outfile.write('match\taln_e\taln_u\ttrie_e\ttrie_u\t#\t%\n')
+        for k,v in sorted(C.items(), key=lambda x:x[1], reverse=True):
+            k = '\t'.join(str(x) for x in k)
+            outfile.write(f'{k}\t{v}\t{v/len(lr):.2%}\n')
         outfile.close()
         
-rule cell_ranger_count:
+rule cellranger_count:
     input:
         sr_fastq_dir = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_dir'],
         ref = lambda wildcards: config['references'][config['samples'][wildcards.sample]['ref']]['cellranger_ref'],
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         bam = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
         matrix = directory('{}/{{sample}}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d)),
@@ -317,10 +342,10 @@ rule cell_ranger_count:
     resources:
         mem  = '512G',
         time = 60*12-1,
-    benchmark:
-        '{}/cell_ranger_count/{{sample}}.txt'.format(bnch_d)
     shell:
+        'INPUT_TIME=$(readlink -f {input.time}) && '
         'rm -r {params.outdir} && mkdir -p {params.outdir} && cd {params.outdir} && '
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o $INPUT_TIME '
         '  cellranger count '
         ' --id={wildcards.sample}'
         ' --chemistry=SC3Pv3'
@@ -335,11 +360,11 @@ rule seurat:
         config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
         script = config['exec']['seurat']['preprocessing'],
         input_path = '{}/{{sample}}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         out_path = protected('{}/{{sample}}/'.format(seurat_d)),
-    benchmark:
-        '{}/seurat/{{sample}}.txt'.format(bnch_d)
     shell:
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}/'
 
 rule flames:
@@ -347,17 +372,17 @@ rule flames:
         script = 'extern/FLAMES/src/bin/match_cell_barcode',
         reads  = lambda wildcards: config['samples'][wildcards.sample]['reads'],
         whitelist = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         csv   = protected('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d)),
         fastq = protected('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d)),
     params:
         tmp_in_dir = '{}/{{sample}}_fastq'.format(flames_d),
         edit_dist = 4,
-    benchmark:
-        '{}/flames/{{sample}}.txt'.format(bnch_d)
     conda:
         'envs/flames.yml'
     shell:
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         'rm -rf {params.tmp_in_dir}  && \n'
         'mkdir -p {params.tmp_in_dir}  && \n'
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
