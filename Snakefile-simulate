@@ -24,6 +24,9 @@ fred_d = f'{outpath}/freddie-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
 
+for s in config['sim_samples']:
+    assert s in config['samples']
+
 lr_sim_cyc = 3
 lr_sim_eff = 0.75
 lr_sim_err = 0.000001
@@ -36,16 +39,16 @@ rule all:
         'extern/3M-february-2018.txt',
         '{}/salmon_index'.format(simu_d),
         '{}/minnow_index'.format(simu_d),
-        expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['samples']),
-        expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['samples']),
+        expand('{}/salmon_alevin/{{sample}}'.format(simu_d), sample = config['sim_samples']),
+        expand('{}/minnow_estimate/{{sample}}'.format(simu_d), sample = config['sim_samples']),
         expand(
             '{}/minnow_simulate/{{sample}}/{{gcsSL}}/hg_100_S1_L001_R1_001.fastq.gz'.format(simu_d),
-            sample = config['samples'],
+            sample = config['sim_samples'],
             gcsSL = config['gene_cell_seed_sr_lr'],
         ),
         expand(
             '{}/reads/{{sample}}/{{gcsSL}}/{{f}}'.format(simu_d),
-            sample = config['samples'],
+            sample = config['sim_samples'],
             gcsSL = config['gene_cell_seed_sr_lr'],
             f = [
                 'hg_100_S1_L001_R1_001.fastq.gz',
@@ -59,11 +62,11 @@ rule all:
         ),
         expand(
             '{}/sim_{{sample}}_{{gcsSL}}.truth.tsv.gz'.format(eval_d),
-            sample = config['samples'],
+            sample = config['sim_samples'],
             gcsSL = config['gene_cell_seed_sr_lr'],
         ),
     wildcard_constraints:
-        sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
+        sample = '|'.join([re.escape(s) for s in config['sim_samples']]+['^$'])
 
 rule make_minnow:
     input:
@@ -309,15 +312,15 @@ rule split_minnow_output:
         # Estimating how many mols needed as input to LR PCR step to end up with to lr_cnt
         lr_cnt = lr_cnt//(1+lr_sim_eff)**lr_sim_cyc+1
         minnow_cnt = int(open(input.wc).read())
-        print(f'Minnow sim count: {minnow_cnt}')
+        print(f'Minnow sim count: {minnow_cnt:,}')
         if minnow_cnt < lr_cnt + sr_cnt:
             minnow_cnt = lr_cnt + sr_cnt
         P_l = lr_cnt/(minnow_cnt)
         P_s = sr_cnt/(minnow_cnt)
-        print(f'SR count: {sr_cnt}')
-        print(f'LR count: {lr_cnt}')
-        print(f'SR probability: {P_s}')
-        print(f'LR probability: {P_l}')
+        print(f'SR count: {sr_cnt:,}')
+        print(f'LR count: {lr_cnt:,}')
+        print(f'SR probability: {P_s:.2%}')
+        print(f'LR probability: {P_l:.2%}')
 
         print('Reading GTF pickle')
         tids = pickle.load(open(input.pkl, 'rb'))
@@ -399,6 +402,7 @@ rule pcr:
         './extern/RNAInFuser/build/pcr'
         ' -m {input.mols_tsv}'
         ' -o {output.pcr_tsv}'
+        ' --read-count {wildcards.L}'
         f' --cycles {lr_sim_cyc:d}'
         f' --efficiency {lr_sim_eff:f}'
         f' --error-rate {lr_sim_err:f}'
@@ -413,13 +417,14 @@ rule sequence:
     output:
         lr_fq  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
     threads:
-        64
+        32
     conda:
         'envs/badread.yml'
     params:
         badread  = 'extern/Badread/badread-runner.py',
         tmp  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads_temp'.format(simu_d),
     shell:
+        'rm -rf {params.tmp} && '
         'mkdir -p {params.tmp} && '
         './extern/RNAInFuser/build/sequencer '
         ' -m {input.pcr_tsv}'
@@ -434,8 +439,8 @@ rule sequence:
 
 rule convert_truth:
     input:
-        pcr_tsv  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
-        cbs_fa   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
+        pcr_tsv = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
+        cbs_fa  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
         lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
     output:
         tsv = protected('{}/sim_{{sample}}_{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}.truth.tsv.gz'.format(eval_d)),
@@ -449,7 +454,7 @@ rule convert_truth:
             mol = l[1].split(',')[0]
             assert not mol in mol_to_rname
             mol_to_rname[mol] = rname
-        
+        print('mol_to_rname',len(mol_to_rname))
         bcid_to_bc = dict()
         for l in open(input.cbs_fa):
             l = l.rstrip('\n')
@@ -457,7 +462,7 @@ rule convert_truth:
                 bcid = l[1:]
             else:
                 bcid_to_bc[bcid] = l
-        
+        print('bcid_to_bc',len(bcid_to_bc))
         outfile = gzip.open(output.tsv, 'wt+')
         for l in open(input.pcr_tsv):
             l = l.rstrip('\n').split('\t')[0]
