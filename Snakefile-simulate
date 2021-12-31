@@ -57,7 +57,7 @@ rule all:
                 'cbs.fa',
                 'mbs.fa',
                 'pcr.tsv',
-                'long-reads.fastq',
+                'lr.fq',
             ]
         ),
         expand(
@@ -436,25 +436,44 @@ rule sequence:
         ' --seed {wildcards.seed}'
         ' --keep-temp'
         # ' && rm -r {params.tmp}'
+rule rename_reads:
+    input:
+        lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
+    output:
+        lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/lr.fq'.format(simu_d),
+    run:
+        outfile = open(output.lr_fq, 'w+')
+        rid=0
+        for l in open(input.lr_fq):
+            if l[0]!='@':
+                outfile.write(l)
+                continue
+            l = l.rstrip('\n').split()
+            outfile.write(f'@{rid} {" ".join(l[1:])}\n')
+            rid += 1
 
 rule convert_truth:
     input:
         pcr_tsv = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/pcr.tsv'.format(simu_d),
         cbs_fa  = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/cbs.fa'.format(simu_d),
-        lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/long-reads.fastq'.format(simu_d),
+        lr_fq   = '{}/reads/{{sample}}/{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}/lr.fq'.format(simu_d),
     output:
         tsv = protected('{}/sim_{{sample}}_{{g}}-{{c}}-{{seed}}-{{S}}-{{L}}.truth.tsv.gz'.format(eval_d)),
     run:
         mol_to_rname = dict()
+        rnames = set()
         for l in open(input.lr_fq):
             if l[0]!='@':
                 continue
             l = l.rstrip('\n').split()
             rname = l[0][1:]
+            assert not rname in rnames
+            rnames.add(rname) 
             mol = l[1].split(',')[0]
             assert not mol in mol_to_rname
             mol_to_rname[mol] = rname
         print('mol_to_rname',len(mol_to_rname))
+        print('rnames',len(rnames))
         bcid_to_bc = dict()
         for l in open(input.cbs_fa):
             l = l.rstrip('\n')
@@ -464,11 +483,14 @@ rule convert_truth:
                 bcid_to_bc[bcid] = l
         print('bcid_to_bc',len(bcid_to_bc))
         outfile = gzip.open(output.tsv, 'wt+')
+        print_f = False
         for l in open(input.pcr_tsv):
             l = l.rstrip('\n').split('\t')[0]
             if l[0]=='+':
                 mol = l[1:]
-            elif l.startswith('cb_'):
+                print_f = True
+            elif l.startswith('cb_') and print_f:
+                print_f = False
                 bcid = l
                 outfile.write(f'{mol_to_rname[mol]}\t{bcid_to_bc[bcid]}\n')
         outfile.close()

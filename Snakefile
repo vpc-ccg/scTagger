@@ -16,7 +16,7 @@ for k in config.keys():
     top_dict[keys[-1]]=config[k]
 
 outpath = config['outpath'].rstrip('/')
-bnch_d = f'{outpath}/benchmark-out'
+bnch_d = f'{os.path.abspath(outpath)}/benchmark-out'
 clrg_d = f'{os.path.abspath(outpath)}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 fred_d = f'{outpath}/freddie-out'
@@ -25,13 +25,12 @@ flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
 
-for sample in list(config['samples'].keys()):
-    break
+for sample in list(config['sim_samples']):
     for gcsSL in config['gene_cell_seed_sr_lr']:
         k = f'sim_{sample}_{gcsSL}'
         config['samples'][k] = dict(
             ref = config['samples'][sample]['ref'],
-            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/long-reads.fastq'),
+            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/lr.fq'),
             sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}'),
             sr_fastq_prefix = 'hg_100',
             sr_reads = dict(
@@ -41,7 +40,6 @@ for sample in list(config['samples'].keys()):
             cell_count = int(gcsSL.split('-')[1]),
             seurat_config = config['samples'][sample]['seurat_config'],
         )
-    # del config['samples'][sample]
 
 rev_compl_l = [chr(i) for i in range(128)]
 rev_compl_l[ord('A')] = 'T'
@@ -64,7 +62,11 @@ rule all:
         expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d), sample=config['samples']),
         expand('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d), sample=config['samples']),
-        expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=['flames', 'alns', 'trie']),
+        expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=[
+            'flames',
+            'alns',
+            'trie',
+        ]),
         # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
@@ -73,7 +75,7 @@ rule all:
 
 rule make_time:
     output:
-        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
+        time = '{}/{{sample}}/gtime.tsv'.format(bnch_d)
     run:
         outfile = open(output.time, 'w+')
         record = list()
@@ -301,7 +303,7 @@ rule validate_trie:
             else:
                 matches = tuple()
             assert len(matches) == int(l[2])
-            assert not rid in lr, rid
+            assert not rid in lr, (rid,l)
             lr[rid] = dict(
                 aln=((l[1],matches)),
                 trie=(('inf'),tuple()),
@@ -382,10 +384,10 @@ rule flames:
     conda:
         'envs/flames.yml'
     shell:
-        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         'rm -rf {params.tmp_in_dir}  && \n'
         'mkdir -p {params.tmp_in_dir}  && \n'
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
+        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'
 
 rule convert_flames:
