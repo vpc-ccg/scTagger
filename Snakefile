@@ -67,6 +67,11 @@ rule all:
             'alns',
             'trie',
         ]),
+        expand('{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=[
+            'flames',
+            'alns',
+            'trie',
+        ]),
         # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
         # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
         # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
@@ -90,7 +95,6 @@ rule make_time:
 
 rule extract_lr_br:
     input:
-        script = config['exec']['split'],
         reads = lambda wildcards: config['samples'][wildcards.sample]['reads'],
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     wildcard_constraints:
@@ -103,9 +107,11 @@ rule extract_lr_br:
     resources:
         mem  = "256G",
         time = 59,
+    params:
+        script = config['exec']['split'],
     shell:
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
-        '{input.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
+        '{params.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
 
 rule minimap2:
     input:
@@ -415,8 +421,7 @@ rule convert_trie:
         outfile = gzip.open(output.tsv, 'wt+')
         for l in gzip.open(input.lr_tsv,'rt'):
             l = l.rstrip('\n').split('\t')
-            if l[2]=='1':
-                outfile.write(f'{l[0]}\t{l[4]}\n')
+            outfile.write(f'{l[0]}\t{l[4]}\n')
         outfile.close()
 
 rule convert_alns:
@@ -428,8 +433,7 @@ rule convert_alns:
         outfile = gzip.open(output.tsv, 'wt+')
         for l in gzip.open(input.lr_tsv,'rt'):
             l = l.rstrip('\n').split('\t')
-            if l[2]=='1':
-                outfile.write(f'{l[0]}\t{l[4]}\n')
+            outfile.write(f'{l[0]}\t{l[4]}\n')
         outfile.close()
 
 rule evaluate:
@@ -444,6 +448,7 @@ rule evaluate:
     run:
         stats = dict(
             matches = 0,
+            ambiguous = 0,
             mismatch = 0,
             skipped = 0,
         )
@@ -455,11 +460,20 @@ rule evaluate:
         for l in gzip.open(input.tool_tsv, 'rt'):
             rname,bc = l.rstrip('\n').split('\t')
             assert rname in rname_to_bc, (rname,l)
-            if bc==rname_to_bc[rname] or rev_compl(bc)==rname_to_bc[rname]:
+            if len(bc) == 0:
+                continue
+            bc = bc.split(',')
+            match_count = 0
+            for b in bc:
+                if b==rname_to_bc[rname] or rev_compl(b)==rname_to_bc[rname]:
+                    match_count += 1
+            if match_count == 0:
+                stats['mismatch'] += 1
+            elif match_count == len(bc):
                 stats['matches'] += 1
             else:
-                stats['mismatch'] += 1
-        stats['skipped'] = len(rname_to_bc) - stats['matches'] - stats['mismatch']
+                stats['ambiguous'] += 1
+        stats['skipped'] = len(rname_to_bc) - stats['matches'] - stats['mismatch'] - stats['ambiguous']
         outfile = open(output.stats, 'w+')
         for k,v in stats.items():
             outfile.write(f'{k}:\t{v}\t({v/len(rname_to_bc):.2%})\n')

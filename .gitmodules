@@ -13,3 +13,6 @@
 [submodule "extern/FLAMES"]
 	path = extern/FLAMES
 	url = https://github.com/LuyiTian/FLAMES
+[submodule "extern/sicelore"]
+	path = extern/sicelore
+	url = https://github.com/ucagenomix/sicelore
