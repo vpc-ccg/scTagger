@@ -24,6 +24,7 @@ seurat_d = f'{outpath}/seurat-out'
 flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
+sicelore_d = f'{outpath}/sicelore-out'
 
 for sample in list(config['sim_samples']):
     for gcsSL in config['gene_cell_seed_sr_lr']:
@@ -395,6 +396,25 @@ rule flames:
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'
+
+rule sicelore:
+    input:
+        script = 'extern/sicelore_run.sh',
+        whitelist = config['salmon_refs']['whitelist'],
+        SR_bam_file = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+        LR_fastq = '',
+        BED_file = config['references']['homo_sapiens']['BED'],
+        genome_fasta = config['references']['homo_sapiens']['genome'],
+        sicelore_path = 'extern/sicelore'
+
+    output:
+        outpath   = protected('{}/{{sample}}/'.format(sicelore_d)),
+    params:
+        number_thread = 4
+    conda:
+        'envs/sicelore.yml'
+    shell:
+        '{input.script} {input.sicelore_path} {input.SR_bam_file}'
 
 rule convert_flames:
     input:

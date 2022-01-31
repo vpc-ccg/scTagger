@@ -120,6 +120,7 @@ references:
         genome         : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
         genome_fai     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
         cellranger_ref : /groups/hachgrp/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
+        BED : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.24.bed
 
 salmon_refs:
     annot          : /groups/hachgrp/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
