@@ -8,11 +8,11 @@ samtools=`which samtools`
 jar=$1
 bam=$2
 whitelist=$3
-LR_fastq=$4
-BED_file=$5
-genome_fasta=$6
-out_put=$7
-num_thread=$8
+lr_fq=$4
+bed=$5
+genome_fa=$6
+output_dir=$7
+threads=$8
 
 
 if [ -z "$java" ] || [ -z "$spoa" ] || [ -z "$samtools" ] || [ -z "$minimap2" ]
@@ -31,10 +31,10 @@ mkdir $output_dir
 mkdir $tmp_dir
 
 # parse illumina bam file
-$java -jar $jar/IlluminaParser-1.0.jar -i $bam -o $out_put/190c.clta.illumina.bam.obj -t $whitelist -b CB -g GN -u UB
+$java -jar $jar/IlluminaParser-1.0.jar -i $bam -o $output_dir/190c.clta.illumina.bam.obj -t $whitelist -b CB -g GN -u UB
 
 # scan nanopore reads
-$java -jar $jar/NanoporeReadScanner-0.5.jar -i Data/190c.clta.nanopore.reads.fq -o $out_put
+$java -jar $jar/NanoporeReadScanner-0.5.jar -i Data/190c.clta.nanopore.reads.fq -o $output_dir
 
 # map reads to genome
 $minimap2 -ax splice -uf --MD --sam-hit-only -t 4 --junc-bed Gencode/gencode.v18.mm10.junctions.bed Data/chr4.fa.gz $output_dir/passed/190c.clta.nanopore.readsFWD.fq > $output_dir/minimap.sam

@@ -400,21 +400,20 @@ rule flames:
 rule sicelore:
     input:
         script = 'extern/sicelore_run.sh',
-        whitelist = config['salmon_refs']['whitelist'],
-        SR_bam_file = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
-        LR_fastq = '',
-        BED_file = config['references']['homo_sapiens']['BED'],
-        genome_fasta = config['references']['homo_sapiens']['genome'],
-        sicelore_path = 'extern/sicelore'
-
+        jar='extern/sicelore/Jar/',
+        bam= '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),,
+        whitelist= config['salmon_refs']['whitelist'],,
+        lr_fq=lambda wildcards: config['samples'][wildcards.sample]['reads'],,
+        bed= config['references']['homo_sapiens']['transcriptome_bed'],
+        genome_fa= config['references']['homo_sapiens']['genome'],,
     output:
-        outpath   = protected('{}/{{sample}}/'.format(sicelore_d)),
-    params:
-        number_thread = 4
+        output_dir = directory('{}/{{sample}}/'.format(sicelore_d)),
+    threads:
+        32
     conda:
         'envs/sicelore.yml'
     shell:
-        '{input.script} {input.sicelore_path} {input.SR_bam_file}'
+        '{input.script} {input.jar} {input.bam} {input.whitelist} {input.lr_fq} {input.bed} {input.genome_fa} {output.output_dir} {threads}'
 
 rule convert_flames:
     input:
