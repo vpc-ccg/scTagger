@@ -1,4 +1,4 @@
-name: r-seurat
+name: lr_sim
 channels:
   - anaconda 
   - conda-forge

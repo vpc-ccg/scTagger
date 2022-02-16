@@ -1,4 +1,4 @@
-name: r-seurat
+name: sr_sim
 channels:
   - bioconda
   - conda-forge

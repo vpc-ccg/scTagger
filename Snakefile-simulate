@@ -205,13 +205,14 @@ rule minnow_estimate:
 
 rule minnow_splatter:
     input:
+        script = 'extern/minnow_splatter.R',
         tgMap = '{}/salmon_tx2gene.tsv'.format(simu_d),
     output:
         directory('{}/minnow_splatter/{{sample}}/{{gene_cnt}}-{{cell_cnt}}-{{seed}}-{{S}}-{{L}}'.format(simu_d)),
     conda:
         'envs/simulate.yml'
     shell:
-        'R/minnow_splatter.R '
+        '{input.script} '
         ' {output} '
         ' {wildcards.gene_cnt} '
         ' {wildcards.cell_cnt}'

@@ -1,9 +1,0 @@
-name: sicelore
-channels:
-  - bioconda
-dependencies:
-  - minimap2
-  - samtools
-  - spoa
-  - racon
-  - fastp  

@@ -19,12 +19,9 @@ outpath = config['outpath'].rstrip('/')
 bnch_d = f'{os.path.abspath(outpath)}/benchmark-out'
 clrg_d = f'{os.path.abspath(outpath)}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
-fred_d = f'{outpath}/freddie-out'
-seurat_d = f'{outpath}/seurat-out'
 flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
-sicelore_d = f'{outpath}/sicelore-out'
 
 for sample in list(config['sim_samples']):
     for gcsSL in config['gene_cell_seed_sr_lr']:
@@ -73,11 +70,6 @@ rule all:
             'alns',
             'trie',
         ]),
-        # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
-        # expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule make_time:
     output:
@@ -109,106 +101,10 @@ rule extract_lr_br:
         mem  = "256G",
         time = 59,
     params:
-        script = config['exec']['split'],
+        script = config['exec']['extract_lr_bc'],
     shell:
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{params.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
-
-rule minimap2:
-    input:
-        reads  = lambda wildcards: config['samples'][wildcards.sample]['reads'],
-        genome = lambda wildcards: config['references'][config['samples'][wildcards.sample]['ref']]['genome'],
-    output:
-        bam=protected('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d)),
-        bai=protected('{}/{{sample}}/{{sample}}.sorted.bam.bai'.format(fred_d)),
-    conda:
-        'extern/freddie/envs/minimap2.yml'
-    threads:
-        32
-    resources:
-        mem  = "128G",
-        time = 1439,
-    wildcard_constraints:
-        sample = '|'.join([re.escape(s) for s in config['samples']]+['^$'])
-    shell:
-        'minimap2 -a -x splice -t {threads} {input.genome} {input.reads} | '
-        '  samtools sort -T {output.bam}.tmp -m 2G -@ {threads} -O bam - > {output.bam} && '
-        '  samtools index {output.bam} '
-
-rule freddie_split:
-    input:
-        script = config['exec']['freddie']['split'],
-        reads  = lambda wildcards: config['samples'][wildcards.sample]['reads'],
-        bam = '{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d),
-    output:
-        split = directory('{}/{{sample}}/freddie.split'.format(fred_d)),
-    conda:
-        'extern/freddie/envs/freddie.yml'
-    threads:
-        32
-    resources:
-        mem  = "16G",
-        time = 359,
-    shell:
-        '{input.script} -b {input.bam} -r {input.reads} -o {output.split} -t {threads}'
-
-rule freddie_segment:
-    input:
-        script = config['exec']['freddie']['segment'],
-        split  = '{}/{{sample}}/freddie.split'.format(fred_d),
-    output:
-        segment = directory('{}/{{sample}}/freddie.segment'.format(fred_d)),
-    conda:
-        'extern/freddie/envs/freddie.yml'
-    threads:
-        32
-    resources:
-        mem  = "32G",
-        time = 599,
-    shell:
-        '{input.script} -s {input.split} -o {output.segment} -t {threads}'
-
-rule freddie_cluster:
-    input:
-        license = config['gurobi']['license'],
-        script  = config['exec']['freddie']['cluster'],
-        segment = '{}/{{sample}}/freddie.segment'.format(fred_d),
-    output:
-        cluster = directory('{}/{{sample}}/freddie.cluster'.format(fred_d)),
-    conda:
-        'extern/freddie/envs/freddie.yml'
-    params:
-        logs    = directory('{}/{{sample}}/freddie.cluster_logs'.format(fred_d)),
-        log     = '{}/{{sample}}/freddie.cluster.log'.format(fred_d),
-        timeout = config['gurobi']['timeout'],
-    conda:
-        'extern/freddie/envs/freddie.yml'
-    threads:
-        32
-    resources:
-        mem  = "32G",
-        time = 999,
-    shell:
-        'export GRB_LICENSE_FILE={input.license}; '
-        '{input.script} -s {input.segment} -o {output.cluster} -l {output.logs} -t {threads} -to {params.timeout} > {output.log}'
-
-rule freddie_isoforms:
-    input:
-        script  = config['exec']['freddie']['isoforms'],
-        split   = '{}/{{sample}}/freddie.split'.format(fred_d),
-        cluster = '{}/{{sample}}/freddie.cluster'.format(fred_d),
-    output:
-        isoforms = protected('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d)),
-    conda:
-        'extern/freddie/envs/freddie.yml'
-    threads:
-        8
-    resources:
-        mem  = "16G",
-        time = 359,
-    shell:
-        '{input.script} -s {input.split} -c {input.cluster} -o {output.isoforms} -t {threads}'
-
 
 rule extract_sr_br:
     input:
@@ -232,9 +128,9 @@ rule extract_sr_br:
             outfile.write(f'{qname}\t{C}\t{U}\n')
         outfile.close()
 
-rule filter_bc:
+rule select_sr_bc:
     input:
-        script = config['exec']['select'],
+        script = config['exec']['select_sr_bc'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
@@ -272,7 +168,6 @@ rule match_trie:
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
-        # plot = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.pdf'.format(extr_d)),
     threads:
         32
     resources:
@@ -280,8 +175,7 @@ rule match_trie:
         time = 60*5-1,
     shell:
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'#-p {output.plot} -m {params.mem}'
-
+        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'
 
 rule validate_trie:
     input:
@@ -296,12 +190,6 @@ rule validate_trie:
         time = 60*6-1,
     run:
         lr = dict()
-        # stats = dict(
-        #     matches = 0,
-        #     mismatch = 0,
-        #     error_too_low = 0,
-        #     skipped = 0,
-        # )
         for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
             l = l.rstrip('\n').split('\t')
             rid = l[0]
@@ -364,18 +252,6 @@ rule cellranger_count:
         ' --localcores {threads}'        
         ' --localmem {params.mem_gb}'
 
-rule seurat:
-    input:
-        config_r = lambda wildcards: config['samples'][wildcards.sample]['seurat_config'],
-        script = config['exec']['seurat']['preprocessing'],
-        input_path = '{}/{{sample}}/{{sample}}/outs/raw_feature_bc_matrix'.format(clrg_d),
-        time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
-    output:
-        out_path = protected('{}/{{sample}}/'.format(seurat_d)),
-    shell:
-        'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
-        'Rscript {input.script} {input.config_r} {input.input_path} {output.out_path}/'
-
 rule flames:
     input:
         script = 'extern/FLAMES/src/bin/match_cell_barcode',
@@ -396,24 +272,6 @@ rule flames:
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'
-
-rule sicelore:
-    input:
-        script = 'extern/sicelore_run.sh',
-        jar='extern/sicelore/Jar/',
-        bam= '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),,
-        whitelist= config['salmon_refs']['whitelist'],,
-        lr_fq=lambda wildcards: config['samples'][wildcards.sample]['reads'],,
-        bed= config['references']['homo_sapiens']['transcriptome_bed'],
-        genome_fa= config['references']['homo_sapiens']['genome'],,
-    output:
-        output_dir = directory('{}/{{sample}}/'.format(sicelore_d)),
-    threads:
-        32
-    conda:
-        'envs/sicelore.yml'
-    shell:
-        '{input.script} {input.jar} {input.bam} {input.whitelist} {input.lr_fq} {input.bed} {input.genome_fa} {output.output_dir} {threads}'
 
 rule convert_flames:
     input:
