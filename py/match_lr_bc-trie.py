@@ -2,8 +2,6 @@
 import sys
 import argparse
 import gzip
-import math
-import psutil
 from multiprocessing import Pool,RawArray
 
 import numpy as np
@@ -81,9 +79,6 @@ lr_names = None
 
 def rev_compl(s):
     return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
-
-def mem_use_gb():
-    return psutil.Process().memory_info().rss/(1024**3)
 
 class Trie(object):
     def __init__(self, max_error, barcode_length, capacity=100_000_000):
@@ -317,8 +312,6 @@ def main():
         max_error=args.max_error,
         threads=args.threads,
     )
-    memory_useage_GB = mem_use_gb()
-    print(f"Memory usage: {memory_useage_GB:.2f}GB")
     # if args.plotfile != None:
     #     show_plot(result, args.plotfile, args.max_error)
     if args.outfile:

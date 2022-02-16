@@ -36,7 +36,6 @@ for sample in list(config['sim_samples']):
                 R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R2_001.fastq.gz'),
             ),
             cell_count = int(gcsSL.split('-')[1]),
-            seurat_config = config['samples'][sample]['seurat_config'],
         )
 
 rev_compl_l = [chr(i) for i in range(128)]

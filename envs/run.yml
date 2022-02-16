@@ -1,0 +1,13 @@
+name: run_scTagger
+channels:
+  - anaconda 
+  - conda-forge
+  - bioconda
+dependencies:
+  - snakemake>=6
+  - python-edlib
+  - numpy
+  - matplotlib
+  - scipy
+  - tqdm
+  - pandas

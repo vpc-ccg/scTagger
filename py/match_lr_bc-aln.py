@@ -3,9 +3,6 @@ import sys
 import argparse
 from multiprocessing import Pool
 import gzip
-# from collections import Counter
-# from itertools import combinations,groupby
-# from operator import itemgetter
 
 import edlib
 from tqdm import tqdm

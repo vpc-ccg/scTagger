@@ -3,13 +3,11 @@ from math import ceil
 import sys
 import argparse
 import gzip
-import pandas as pd
-
-from tqdm import tqdm
-
 from collections import Counter
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
+from tqdm import tqdm
 
 
 def parse_args():
