@@ -188,8 +188,6 @@ rule minnow_estimate:
         cdna = config['salmon_refs']['transcriptome'],
     output:
         directory('{}/minnow_estimate/{{sample}}'.format(simu_d))
-    # conda:
-    #     'envs/simulate.yml'
     threads:
         64
     resources:

@@ -157,7 +157,7 @@ def get_ranges(data):
     while True:
         PEAK = np.argmax(F)
         neighborhood_sum = sum(F[max(0,PEAK-20):min(PEAK+20,len(F))])
-        print(f'--> {neighborhood_sum/T: 5.2%} of strend reads fall around {L[PEAK]}', file=sys.stderr)
+        print(f'--> {neighborhood_sum/T: 5.2%} of strand reads fall around {L[PEAK]}', file=sys.stderr)
         if sum(F[max(0,PEAK-20):min(PEAK+20,len(F))]) < 0.01*T:
             break
         Q = deque()

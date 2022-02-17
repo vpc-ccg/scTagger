@@ -17,8 +17,8 @@ gene_cell_seed_sr_lr:
     - '3000-500-42-15000000-1000000'
     - '20000-5000-42-150000000-5000000'
 
-sim_samples:
-    - N1
+# sim_samples:
+#     - N1
 
 samples:
     NOA1:
