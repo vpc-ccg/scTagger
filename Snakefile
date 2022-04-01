@@ -24,23 +24,22 @@ seurat_d = f'{outpath}/seurat-out'
 flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
-sicelore_d = f'{outpath}/sicelore-out'
 
-for sample in list(config['sim_samples']):
-    for gcsSL in config['gene_cell_seed_sr_lr']:
-        k = f'sim_{sample}_{gcsSL}'
-        config['samples'][k] = dict(
-            ref = config['samples'][sample]['ref'],
-            reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/lr.fq'),
-            sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}'),
-            sr_fastq_prefix = 'hg_100',
-            sr_reads = dict(
-                R1 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R1_001.fastq.gz'),
-                R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R2_001.fastq.gz'),
-            ),
-            cell_count = int(gcsSL.split('-')[1]),
-            seurat_config = config['samples'][sample]['seurat_config'],
-        )
+# for sample in list(config['sim_samples']):
+#     for gcsSL in config['gene_cell_seed_sr_lr']:
+#         k = f'sim_{sample}_{gcsSL}'
+#         config['samples'][k] = dict(
+#             ref = config['samples'][sample]['ref'],
+#             reads = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/lr.fq'),
+#             sr_fastq_dir = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}'),
+#             sr_fastq_prefix = 'hg_100',
+#             sr_reads = dict(
+#                 R1 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R1_001.fastq.gz'),
+#                 R2 = os.path.abspath(f'{simu_d}/reads/{sample}/{gcsSL}/hg_100_S1_L001_R2_001.fastq.gz'),
+#             ),
+#             cell_count = int(gcsSL.split('-')[1]),
+#             seurat_config = config['samples'][sample]['seurat_config'],
+#         )
 
 rev_compl_l = [chr(i) for i in range(128)]
 rev_compl_l[ord('A')] = 'T'
@@ -73,10 +72,10 @@ rule all:
             'alns',
             'trie',
         ]),
-        # expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
-        # expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
+        expand('{}/{{sample}}/freddie.split'.format(fred_d),         sample=config['samples']),
+        expand('{}/{{sample}}/freddie.segment'.format(fred_d),       sample=config['samples']),
+        expand('{}/{{sample}}/freddie.cluster'.format(fred_d),       sample=config['samples']),
+        expand('{}/{{sample}}/freddie.isoforms.gtf'.format(fred_d),  sample=config['samples']),
         # expand('{}/{{sample}}/'.format(seurat_d), sample=config['samples'])
 
 rule make_time:
@@ -190,7 +189,7 @@ rule freddie_cluster:
         time = 999,
     shell:
         'export GRB_LICENSE_FILE={input.license}; '
-        '{input.script} -s {input.segment} -o {output.cluster} -l {output.logs} -t {threads} -to {params.timeout} > {output.log}'
+        '{input.script} -s {input.segment} -o {output.cluster} -l {params.logs} -t {threads} -to {params.timeout} > {params.log}'
 
 rule freddie_isoforms:
     input:
@@ -396,24 +395,6 @@ rule flames:
         'ln -s {input.reads} {params.tmp_in_dir}/  && \n'
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} {params.tmp_in_dir}/ {output.csv} {output.fastq} <(less {input.whitelist}) {params.edit_dist}'
-
-rule sicelore:
-    input:
-        script = 'extern/sicelore_run.sh',
-        jar='extern/sicelore/Jar/',
-        bam= '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),,
-        whitelist= config['salmon_refs']['whitelist'],,
-        lr_fq=lambda wildcards: config['samples'][wildcards.sample]['reads'],,
-        bed= config['references']['homo_sapiens']['transcriptome_bed'],
-        genome_fa= config['references']['homo_sapiens']['genome'],,
-    output:
-        output_dir = directory('{}/{{sample}}/'.format(sicelore_d)),
-    threads:
-        32
-    conda:
-        'envs/sicelore.yml'
-    shell:
-        '{input.script} {input.jar} {input.bam} {input.whitelist} {input.lr_fq} {input.bed} {input.genome_fa} {output.output_dir} {threads}'
 
 rule convert_flames:
     input:
