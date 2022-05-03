@@ -50,9 +50,9 @@ rule extract_lr_br:
         plot = protected('{}/{{sample}}/{{sample}}.lr_sa_distance.pdf'.format(extr_d)),
     threads:
         32
-    resources:
-        mem  = "256G",
-        time = 59,
+    # resources:
+    #     mem  = "256G",
+    #     time = 59,
     params:
         script = config['exec']['sctagger'],
     shell:
@@ -66,9 +66,9 @@ rule extract_sr_br:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
     threads:
         8
-    resources:
-        mem  = "1G",
-        time = 59,
+    # resources:
+    #     mem  = "1G",
+    #     time = 59,
     run:
         outfile = gzip.open(output.tsv, 'wt')
         for aln in tqdm(pysam.AlignmentFile(input.bam, 'rb', threads=threads)):
@@ -88,9 +88,9 @@ rule filter_bc:
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
         plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
-    resources:
-        mem  = "8G",
-        time = 59,
+    # resources:
+    #     mem  = "8G",
+    #     time = 59,
     shell:
         '{input.script} extract_top_sr_bc -i {input.tsv} -o {output.tsv} -p {output.plot}'
 
@@ -104,57 +104,12 @@ rule match_trie:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
     threads:
         32
-    resources:
-        mem  = "64G",
-        time = 60*5-1,
+    # resources:
+    #     mem  = "64G",
+    #     time = 60*5-1,
     shell:
         '{input.script} match_trie -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'#-p {output.plot} -m {params.mem}'
 
-
-rule validate_trie:
-    input:
-        lr_aln_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
-        lr_trie_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d),
-    output:
-        check = '{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.txt'.format(extr_d),
-    threads:
-        1
-    resources:
-        mem  = "250G",
-        time = 60*6-1,
-    run:
-        lr = dict()
-        for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
-            l = l.rstrip('\n').split('\t')
-            rid = l[0]
-            if l[4] !='':
-                matches = tuple(sorted(l[4].split(',')))
-            else:
-                matches = tuple()
-            assert len(matches) == int(l[2])
-            assert not rid in lr, (rid,l)
-            lr[rid] = dict(
-                aln=((l[1],matches)),
-                trie=(('inf'),tuple()),
-            )
-        for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
-            l = l.rstrip('\n').split('\t')
-            rid = l[0]
-            if l[4] !='':
-                matches = tuple(sorted(l[4].split(',')))
-            else:
-                matches = tuple()
-            assert len(matches) == int(l[2])
-            lr[rid]['trie'] = (l[1],matches)
-        C = Counter(
-            (X['aln']==X['trie'], X['aln'][0], len(X['aln'][1])<2, X['trie'][0], len(X['trie'][1])<2,) for X in lr.values()
-        )
-        outfile = open(output.check, 'w+')
-        outfile.write('match\taln_e\taln_u\ttrie_e\ttrie_u\t#\t%\n')
-        for k,v in sorted(C.items(), key=lambda x:x[1], reverse=True):
-            k = '\t'.join(str(x) for x in k)
-            outfile.write(f'{k}\t{v}\t{v/len(lr):.2%}\n')
-        outfile.close()
         
 rule cellranger_count:
     input:
@@ -169,9 +124,9 @@ rule cellranger_count:
         mem_gb = 512
     threads:
         32
-    resources:
-        mem  = '512G',
-        time = 60*12-1,
+    # resources:
+    #     mem  = '512G',
+    #     time = 60*12-1,
     shell:
         'rm -r {params.outdir} && mkdir -p {params.outdir} && cd {params.outdir} && '
         'cellranger count '
