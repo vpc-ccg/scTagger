@@ -16,87 +16,109 @@ from collections import Counter
 import psutil
 
 
-def parse_args_extract_lr_bc():
-    parser = argparse.ArgumentParser(
-        description="Extract long-read barcodes using short-read adapter alignment")
-    parser.add_argument("-r",
-                        "--reads",
-                        nargs="+",
-                        type=str,
-                        required=True,
-                        help="Space separated paths to reads in FASTQ")
-    parser.add_argument("-g",
-                        "--ranges",
-                        nargs="+",
-                        type=str,
-                        default=list(),
-                        help="""Space separated of the ranges of where SR adapter should be found on the LR's.
+def parse_args():
+    parser = argparse.ArgumentParser(description="scTagger pipeline!")
+    subparsers = parser.add_subparsers(dest='subcommand')
+    subparsers.required = True
+
+    parser_lr_bc = subparsers.add_parser('extract_lr_bc')
+    # add a required argument
+    parser_lr_bc.add_argument("-r", "--reads", nargs="+", type=str, required=True,
+                              help="Space separated paths to reads in FASTQ")
+    parser_lr_bc.add_argument("-g", "--ranges", nargs="+", type=str, default=list(),
+                              help="""Space separated of the ranges of where SR adapter should be found on the LR's.
                                 Intervals should have start with "f" or "r" to indicated which side of the read the interval is suppused to be.
                                 E.g. f20:40 r1:30 means SR adapter needs to be either on the range 20-40bp (20 and 40 both included) 
                                 and on the forward strand OR the last 30bp from the end of the read and on the reverse strand.
                                 If adapters are found on multiple ranges on the read, then all of them are considered invalid.
                                 Ranges are 1-indexed and inclusive.
                                 Default: Detect from data.""")
-    parser.add_argument("-z",
-                        "--gzipped",
-                        dest='gzipped',
-                        action='store_true',
-                        help="Indicate input is gzipped. Default: Assume input is gzipped if it ends with \".gz\".")
-    parser.add_argument("-t",
-                        "--threads",
-                        default=1,
-                        type=int,
-                        help="Number of threads. Default: 1")
-    parser.add_argument("-sa",
-                        "--short-read-adapter",
-                        type=str,
-                        default='CTACACGACGCTCTTCCGATCT',
-                        help="Short-read adapter. Default: CTACACGACGCTCTTCCGATCT")
-    parser.add_argument("-o",
-                        "--outfile",
-                        type=str,
-                        default=None,
-                        help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
-    parser.add_argument("-p",
-                        "--plotfile",
-                        type=str,
-                        default=None,
-                        help="Path to plot file. Default: no plotting")
-    parser.add_argument("--num-bp-after",
-                        type=int,
-                        default=20,
-                        help="Number of bases after the end of the SR adapter alignment to generate. Default: 20")
+    parser_lr_bc.add_argument("-z", "--gzipped", dest='gzipped', action='store_true',
+                              help="Indicate input is gzipped. Default: Assume input is gzipped if it ends with \".gz\".")
+    parser_lr_bc.add_argument("-t", "--threads", default=1, type=int,
+                              help="Number of threads. Default: 1")
+    parser_lr_bc.add_argument("-sa", "--short-read-adapter", type=str,
+                              default='CTACACGACGCTCTTCCGATCT',
+                              help="Short-read adapter. Default: CTACACGACGCTCTTCCGATCT")
+    parser_lr_bc.add_argument("-o", "--outfile", type=str, default=None,
+                              help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
+    parser_lr_bc.add_argument("-p", "--plotfile", type=str, default=None,
+                              help="Path to plot file. Default: no plotting")
+    parser_lr_bc.add_argument("--num-bp-after", type=int, default=20,
+                              help="Number of bases after the end of the SR adapter alignment to generate. Default: 20")
+
+    parser_top_sr = subparsers.add_parser('extract_top_sr_bc')
+    parser_top_sr.add_argument("-i", "--input", type=str, required=True,
+                               help="Input file")
+    parser_top_sr.add_argument("-o", "--outfile", type=str, default=None,
+                               help="Path to output file. Default: STDOUT")
+    parser_top_sr.add_argument("-p", "--plotfile", type=str, default=None,
+                               help="Path to plot file")
+    parser_top_sr.add_argument("--thresh", type=float, default=0.005,
+                               help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
+    parser_top_sr.add_argument("--step-size", type=int, default=1000,
+                               help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
+    parser_top_sr.add_argument("--max-barcode-cnt", type=int, default=25_000,
+                               help="Max number of barcodes to keep. Default: 25000")
+
+    parser_match_trie = subparsers.add_parser('match_trie')
+    parser_match_trie.add_argument("-lr", "--long-read-segments", type=str,
+                                   required=True, help="Long-read segments TSV file")
+    parser_match_trie.add_argument("-sr", "--short-read-barcodes", type=str,
+                                   required=True, help="Short-read barcode list TSV file")
+    parser_match_trie.add_argument("-mr", "--max-error", default=2, type=int,
+                                   help="Maximum number of errors allowed for barcode matching. Default: 2")
+    parser_match_trie.add_argument("-m", "--mem", default=16.0, type=float,
+                                   help="Maximum number of GB of RAM to be used. Default: 16.0")
+    parser_match_trie.add_argument("-bl", "--barcode-length", default=16, type=int,
+                                   help="Length of barcodes. Default: 16")
+    parser_match_trie.add_argument("-t", "--threads", default=16, type=int,
+                                   help="Number of threads to use for searching. Default: 16")
+    parser_match_trie.add_argument("-p", "--plotfile", default=None, type=str,
+                                   help="Path of plot file. Default: no plotting")
+    parser_match_trie.add_argument("-o", "--outfile", type=str, default=None,
+                                   help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
     args = parser.parse_args()
-    assert 0<args.num_bp_after
-    ranges = [list(),list()]
-    global ranges_dicts, num_bp_after
-    num_bp_after = args.num_bp_after
-    ranges_dicts = [dict(), dict()]
-    for r in args.ranges:
-        assert r[0] in 'fr', r
-        strand = r[0]
-        r = r[1:].split(':')
-        assert len(r) == 2,r
-        s = int(r[0])
-        e = int(r[1])
-        assert 0 < s <= e, (s,e)
-        if strand == 'f':
-            ranges_idx = 0
-            s, e = s - 1, e
-        elif strand == 'r':
-            ranges_idx = 1
-            s, e = -e, -s+1
-        else:
-            assert False, (strand)
-        # print(strand, r, (s,e))
-        for i in np.arange(s,e):
-            assert not i in ranges_dicts[ranges_idx], (ranges_idx, i, ranges_dicts[ranges_idx])
-            # print(i, end=', ')
-            ranges_dicts[ranges_idx][i] = len(ranges[ranges_idx])
-        ranges[ranges_idx].append((s,e))
-        # print()
-    args.ranges = ranges
-    assert args.threads > 0
+
+    if args.subcommand == 'extract_lr_bc':
+        assert 0 < args.num_bp_after
+        ranges = [list(), list()]
+        global ranges_dicts, num_bp_after
+        num_bp_after = args.num_bp_after
+        ranges_dicts = [dict(), dict()]
+        for r in args.ranges:
+            assert r[0] in 'fr', r
+            strand = r[0]
+            r = r[1:].split(':')
+            assert len(r) == 2, r
+            s = int(r[0])
+            e = int(r[1])
+            assert 0 < s <= e, (s, e)
+            if strand == 'f':
+                ranges_idx = 0
+                s, e = s - 1, e
+            elif strand == 'r':
+                ranges_idx = 1
+                s, e = -e, -s + 1
+            else:
+                assert False, (strand)
+            for i in np.arange(s, e):
+                assert not i in ranges_dicts[ranges_idx], (ranges_idx, i, ranges_dicts[ranges_idx])
+                ranges_dicts[ranges_idx][i] = len(ranges[ranges_idx])
+            ranges[ranges_idx].append((s, e))
+        args.ranges = ranges
+        assert args.threads > 0
+
+    if args.subcommand == 'extract_top_sr_bc':
+        assert 0 <= args.thresh <= 1
+        assert 0 < args.step_size
+        assert 0 < args.max_barcode_cnt
+
+    if args.subcommand == 'match_trie':
+        assert args.mem > 0
+        assert args.barcode_length > 0
+        assert args.barcode_length > args.max_error >= 0
+
     return args
 
 
@@ -198,6 +220,7 @@ def get_possible_ranges(alns):
     print(f'Found these ranges on - strand:\t{ranges_r}', file=sys.stderr)
     return ranges_f,ranges_r
 
+
 def set_global_range_dicts(ranges):
     global ranges_dicts
     ranges_dicts = list()
@@ -209,6 +232,7 @@ def set_global_range_dicts(ranges):
                 ranges_dict[i] = idx
         ranges_dicts.append(ranges_dict)
 
+
 def get_lr_bc_alns(seqs, threads):
     print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
     alns = list()
@@ -217,6 +241,7 @@ def get_lr_bc_alns(seqs, threads):
             alns.append((s,d,locs))
     return alns
 
+
 def get_filter_alns(alns, threads):
     print(f'Filtering alignments using ranges on {threads} threads', file=sys.stderr)
     fin_alns = list()
@@ -224,6 +249,7 @@ def get_filter_alns(alns, threads):
         for dist,loc,s,e in tqdm(p.imap(filter_aln, alns, chunksize=10000), total=len(alns)):
             fin_alns.append((dist,loc,s,e))
     return fin_alns
+
 
 def filter_aln(aln):
     strand,dist,locs = aln
@@ -243,6 +269,7 @@ def filter_aln(aln):
             e = min(0, max(locs)+2)
             loc = e
     return dist,loc,s,e
+
 
 def get_lr_bc_alns(seqs, threads):
     print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
@@ -292,9 +319,7 @@ def show_plots_extract_lr_bc(rnames, alns, outfile):
 
     plt.savefig(outfile)
 
-def extract_lr_bc():
-    args = parse_args_extract_lr_bc()
-    print(args, file=sys.stderr)
+def extract_lr_bc(args):
     global a1,a2
     a1 = args.short_read_adapter
     a2 = rev_compl(a1)
@@ -316,43 +341,6 @@ def extract_lr_bc():
     args.outfile.close()
     if args.plotfile != None:
         show_plots_extract_lr_bc(rnames, alns, args.plotfile)
-
-
-def parse_args_top_sr_bc():
-    parser = argparse.ArgumentParser(
-        description="Extract selected short-read barcodes")
-    parser.add_argument("-i",
-                        "--input",
-                        type=str,
-                        required=True,
-                        help="Input file")
-    parser.add_argument("-o",
-                        "--outfile",
-                        type=str,
-                        default=None,
-                        help="Path to output file. Default: STDOUT")
-    parser.add_argument("-p",
-                        "--plotfile",
-                        type=str,
-                        default=None,
-                        help="Path to plot file")
-    parser.add_argument("--thresh",
-                        type=float,
-                        default=0.005,
-                        help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
-    parser.add_argument("--step-size",
-                        type=int,
-                        default=1000,
-                        help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
-    parser.add_argument("--max-barcode-cnt",
-                        type=int,
-                        default=25_000,
-                        help="Max number of barcodes to keep. Default: 25000")
-    args = parser.parse_args()
-    assert 0 <= args.thresh <= 1
-    assert 0 < args.step_size
-    assert 0 < args.max_barcode_cnt
-    return args
 
 def read_short_reads(path):
     if path.endswith('.gz'):
@@ -410,8 +398,7 @@ def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
     plt.legend(plot_lines, [l.get_label() for l in plot_lines], loc='center right')
     plt.savefig(outfile)
 
-def extract_top_sr_bc():
-    args = parse_args_top_sr_bc()
+def extract_top_sr_bc(args):
     total, barcodes = read_short_reads(args.input)
     barcode_cnts = Counter(barcodes)
     barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
@@ -448,57 +435,6 @@ def extract_top_sr_bc():
     for b, c in zip(barcodes[:last_idx],barcode_cnts[:last_idx]):
         outfile.write(f'{b}\t{c}\n')
     outfile.close()
-
-def parse_args_match_trie():
-    parser = argparse.ArgumentParser(
-        description="Extract long-read barcodes using short-read adapter alignment")
-    parser.add_argument("-lr",
-                        "--long-read-segments",
-                        type=str,
-                        required=True,
-                        help="Long-read segments TSV file")
-    parser.add_argument("-sr",
-                        "--short-read-barcodes",
-                        type=str,
-                        required=True,
-                        help="Short-read barcode list TSV file")
-    parser.add_argument("-mr",
-                        "--max-error",
-                        default=2,
-                        type=int,
-                        help="Maximum number of errors allowed for barcode matching. Default: 2")
-    parser.add_argument("-m",
-                        "--mem",
-                        default=16.0,
-                        type=float,
-                        help="Maximum number of GB of RAM to be used. Default: 16.0")
-    parser.add_argument("-bl",
-                        "--barcode-length",
-                        default=16,
-                        type=int,
-                        help="Length of barcodes. Default: 16")
-    parser.add_argument("-t",
-                        "--threads",
-                        default=16,
-                        type=int,
-                        help="Number of threads to use for searching. Default: 16")
-    parser.add_argument("-p",
-                        "--plotfile",
-                        default=None,
-                        type=str,
-                        help="Path of plot file. Default: no plotting")
-    parser.add_argument("-o",
-                        "--outfile",
-                        type=str,
-                        default=None,
-                        help="Path to output file. Output file is gzipped. STDOUT is in normal text. Default: stdout")
-    args = parser.parse_args()
-    assert args.mem > 0
-    assert args.barcode_length > 0
-    assert args.barcode_length > args.max_error >= 0
-
-    return args
-
 
 map_char = [0 for _ in range(128)]
 map_char[ord('A')] = 0
@@ -746,9 +682,7 @@ def show_plot_match_trie(full_data, plotfile, max_error):
     plt.savefig(plotfile)
 
 
-def match_tire():
-    args = parse_args_match_trie()
-    print(args)
+def match_tire(args):
     read_sr_barcodes(args.short_read_barcodes)
     barcode_lens = {len(b) for b in barcodes}
     assert barcode_lens == {args.barcode_length}, barcode_lens
@@ -784,4 +718,19 @@ def match_tire():
     outfile.close()
 
 
+def main():
+    args = parse_args()
+    print(args)
 
+    if args.subcommand == 'extract_lr_bc':
+        extract_lr_bc(args)
+
+    if args.subcommand == 'extract_top_sr_bc':
+        extract_top_sr_bc(args)
+
+    if args.subcommand == 'match_trie':
+        match_tire(args)
+
+
+if __name__ == "__main__":
+    main()

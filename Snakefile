@@ -54,9 +54,9 @@ rule extract_lr_br:
         mem  = "256G",
         time = 59,
     params:
-        script = config['exec']['split'],
+        script = config['exec']['sctagger'],
     shell:
-        '{params.script} -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
+        '{params.script} extract_lr_bc -r {input.reads} -o {output.tsv} -t {threads} -p {output.plot}'
 
 
 rule extract_sr_br:
@@ -83,7 +83,7 @@ rule extract_sr_br:
 
 rule filter_bc:
     input:
-        script = config['exec']['select'],
+        script = config['exec']['sctagger'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
@@ -92,12 +92,12 @@ rule filter_bc:
         mem  = "8G",
         time = 59,
     shell:
-        '{input.script} -i {input.tsv} -o {output.tsv} -p {output.plot}'
+        '{input.script} extract_top_sr_bc -i {input.tsv} -o {output.tsv} -p {output.plot}'
 
 
 rule match_trie:
     input:
-        script  = config['exec']['match_trie'],
+        script  = config['exec']['sctagger'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
         sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
     output:
@@ -108,7 +108,7 @@ rule match_trie:
         mem  = "64G",
         time = 60*5-1,
     shell:
-        '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'#-p {output.plot} -m {params.mem}'
+        '{input.script} match_trie -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'#-p {output.plot} -m {params.mem}'
 
 
 rule validate_trie:

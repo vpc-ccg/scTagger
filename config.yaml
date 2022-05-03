@@ -7,10 +7,7 @@ gurobi:
 
 
 exec:
-    match_trie : py/match_lr_bc-trie.py
-    match_aln : py/match_lr_bc-aln.py
-    split     : py/extract_lr_bc.py
-    select    : py/extract_top_sr_br.py
+    sctagger : py/scTagger.py
     freddie   :
         split    : extern/freddie/py/freddie_split.py
         segment  : extern/freddie/py/freddie_segment.py
