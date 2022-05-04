@@ -14,6 +14,7 @@ import edlib
 from math import ceil
 from collections import Counter
 import psutil
+import pysam
 
 
 def parse_args():
@@ -54,6 +55,8 @@ def parse_args():
                                help="Path to output file. Default: STDOUT")
     parser_top_sr.add_argument("-p", "--plotfile", type=str, default=None,
                                help="Path to plot file")
+    parser_lr_bc.add_argument("-t", "--threads", default=1, type=int,
+                              help="Number of threads. Default: 1")
     parser_top_sr.add_argument("--thresh", type=float, default=0.005,
                                help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
     parser_top_sr.add_argument("--step-size", type=int, default=1000,
@@ -342,21 +345,6 @@ def extract_lr_bc(args):
     if args.plotfile != None:
         show_plots_extract_lr_bc(rnames, alns, args.plotfile)
 
-def read_short_reads(path):
-    if path.endswith('.gz'):
-        f = gzip.open(path, 'rt')
-    else:
-        f = open(path, 'r')
-    barcodes = list()
-    total = 0
-    for line in tqdm(f):
-        total+=1
-        _,cb,_ = line.rstrip('\n').split('\t')
-        if cb == 'NA':
-            continue
-        barcodes.append(cb)
-    return total,barcodes
-
 def get_barcode_hist(barcode_cnts, total, step_size):
     remaining = total
     distribution = {}
@@ -398,8 +386,23 @@ def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
     plt.legend(plot_lines, [l.get_label() for l in plot_lines], loc='center right')
     plt.savefig(outfile)
 
+def extract_sr_barcode(bamfile, threads):
+    barcodes = list()
+    total = 0
+    for aln in tqdm(pysam.AlignmentFile(bamfile, 'rb', threads=threads)):
+        if aln.flag > 256:
+            continue
+        tags = dict(aln.tags)
+        C = tags.get('CB', 'NA').split('-')[0]
+        total+=1
+        if C == 'NA':
+            continue
+        barcodes.append(C)
+
+    return total,barcodes
+
 def extract_top_sr_bc(args):
-    total, barcodes = read_short_reads(args.input)
+    total, barcodes = extract_sr_barcode(args.input, args.threads)
     barcode_cnts = Counter(barcodes)
     barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
     barcodes,barcode_cnts = tuple(zip(*barcode_cnts_tuple))

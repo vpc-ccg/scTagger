@@ -1,8 +1,0 @@
-name: r-seurat
-channels:
-  - bioconda
-  - conda-forge
-dependencies:
-  - minnow=1.2
-  - salmon
-  - bioconductor-splatter
