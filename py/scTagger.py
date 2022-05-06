@@ -55,7 +55,7 @@ def parse_args():
                                help="Path to output file. Default: STDOUT")
     parser_top_sr.add_argument("-p", "--plotfile", type=str, default=None,
                                help="Path to plot file")
-    parser_lr_bc.add_argument("-t", "--threads", default=1, type=int,
+    parser_top_sr.add_argument("-t", "--threads", default=1, type=int,
                               help="Number of threads. Default: 1")
     parser_top_sr.add_argument("--thresh", type=float, default=0.005,
                                help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
