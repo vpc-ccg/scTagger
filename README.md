@@ -3,8 +3,6 @@ scTagger matches barcodes of short- and long-reads of single-cell RNA-seq experi
 
 ## Installation
 
-### Running with Snakemake
-Snakemake provides access to the entire scTagger pipeline. You can check the pipeline at the Snakefile. Make sure to add your file paths to the config.yaml file. You can also add a new sample to run scTagger in various samples. After editing config.yaml, you can run Snakemake with your specific settings.
 
 ### Running manually
 scTagger has a single python file in the py directory containing different functions to match long-reads and short-reads barcodes. 
