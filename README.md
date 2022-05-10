@@ -1,9 +1,9 @@
-# scTagger
-scTagger matches cellular barcodes from 10x Genomics single cell experiments with hybrid short- and long-read RNA sequencing.
+# scTagger paper branch
+scTagger matches cellular barcodes from 10x Genomics single cell experiments with hybrid short- and long-read RNA sequencing. This branch reproduces the results presented in the paper manuscript of scTagger.
 
 # Installation
 
-To install the dependency, use conda (or mamba for faster environment resolution) to create and activate the needed environment:
+To install the needed dependencies, use conda (or mamba for faster environment resolution) to create and activate the needed environment:
 
 ```bash
 mamba env create -f envs/run.yml
@@ -25,58 +25,35 @@ Additionally, scTagger has an alternative, brute-force implementation of the mat
 
 
 
-# Using scTagger
+# Reproducing scTagger results
 
-## TLDR
+## Available datasets
 
-To run scTagger scripts, you need two main input file:
+The real and simulated datasets used in the paper are accessible at our Figshare project page:
 
-- `lr.fq`: FASTQ file of the untrimmed long-reads. This can be gzipped.
-- `sr.bam`: A BAM file output by 10x Cell Ranger. You should be able to find this under the output directory of 10x Cell Ranger with the path: `outs/possorted_genome_bam.bam`
+https://figshare.com/projects/scTagger_data/138886
 
-With these two files at hand, you can run the following scripts:
+While the simulated datasets are provided as-is, the long-read sequences of the real datasets had to be *trimmed* to remove any sequences after the short-read adapter. This allows users to run the matching stages of scTagger (and of FLAMES, the other tool we compare against) without exposing any private patient data. 
 
-```
-py/extract_sr_br.py \
-    -i sr.bam \
-    -o sr_bc.tsv.gz \
-    -t <threads>
+In total, there are 6 samples available to download:
 
-py/extract_top_sr_br.py \
-    -i sr_bc.tsv.gz      
-    -o sr_bc.TOP.tsv.gz \
+- `N_trim`, `NOA1_trim`, and `NOA2_trim`: Trimmed versions of the `N`, `NOA1` and `NOA2` real datasets.
+- `S`, `M`, and `L`: the simulated small, medium and large datasets used in the manuscript.
 
-py/extract_lr_br.py \
-    -r lr.fq           
-    -o lr_bc.tsv.gz \
+Note, that in addition to these datasets, the user can generate new simulated datasets using a real dataset if they have their one. 
 
-py/match_lr_bc-trie.py \
-    -lr lr_bc.tsv.gz \
-    -sr sr_bc.TOP.tsv.gz \
-    -o lr_bc_matches.tsv.gz \
-    -t <threads>
-```
+## Running the benchmarking
 
-## Snakemake
+You can run the benchmark using Snakemake:
 
-The advantage of running the Snakemake is that you can use it also run Cell Ranger as well all scTagger's steps. To use Snakemake, you need to first modify the `config.yaml` file. Use one of the existing samples as a template. Note that Cell Ranger is very finicky about the file path of the short-reads. 
+`snakemake -j <threads>`
 
-Once all paths are updated in `config.yaml`, you can run the Snakemake:
+However, in order to run the simulation datasets, Snakemake need to run Cell Ranger v3 which is not installed in the conda environment. Please ensure that Cell Ranger is installed and `cellranger` is in the environment `PATH` variable. Additionally, edit `cellranger_ref` variable in the `config.yaml` file to point to the Cell Ranger genome reference index. 
 
-```bash
-snakemake --use-conda -j <threads>
-```
+Note, that you can avoid running the simulation datasets by commenting their lines in the `config.yaml` file.
 
-You can also use the Snakemake to generate simulation data based on your real data:
+### Benchmarks
 
-```bash
-snakemake -s Snakefile-simulate --use-conda -j <threads>
-```
-
-Make sure to uncomment the `sim_samples` samples list. This list lists the real samples that are going to be used as basis for gene isoform expression in Minnow single cell simulator. For each sample of the `sim_samples`, one simulated dataset will be generated using the simulation parameters listed by the `gene_cell_seed_sr_lr` list. 
-
-Note that the Snakemake will also run the other tool we compare against, `FLAMES`.
-
-## Script parameters
-
-To view the list of parameters and their descriptions, run any of the scripts followed by `--help`.
+- `analysis/benchmark-out/<sample>/gtime.tsv`: GNU Time captured CPU/real time and max memory use for different processes
+- `analysis/evaluation/<real sample>.all_vs_all.stats`: Comparison of FLAMES and scTagger matching results vs. the brute-force method
+- `analysis/evaluation/<sim sample>.<tool>.stats`: The accuracy statistics of the tool based the ground truth of the simulated dataset.
