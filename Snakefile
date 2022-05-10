@@ -16,14 +16,14 @@ for k in config.keys():
     top_dict[keys[-1]]=config[k]
 
 outpath = config['outpath'].rstrip('/')
-bnch_d = f'{os.path.abspath(outpath)}/benchmark-out'
-clrg_d = f'{os.path.abspath(outpath)}/cellranger-out'
+bnch_d = f'{outpath}/benchmark-out'
+clrg_d = f'{outpath}/cellranger-out'
 extr_d = f'{outpath}/extract-out'
 flames_d = f'{outpath}/flames-out'
 simu_d = f'{outpath}/simulation'
 eval_d = f'{outpath}/evaluation'
 
-for sample in list(config['sim_samples']):
+for sample in list(config.get('sim_samples', [])):
     for gcsSL in config['gene_cell_seed_sr_lr']:
         k = f'sim_{sample}_{gcsSL}'
         config['samples'][k] = dict(
@@ -49,22 +49,17 @@ def rev_compl(s):
 
 rule all:
     input:
-        expand('{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.txt'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.sorted.bam'.format(fred_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d), sample=config['samples']),
-        expand('{}/{{sample}}/{{sample}}.match.fastq.gz'.format(flames_d), sample=config['samples']),
         expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=[
             'flames',
             'alns',
             'trie',
         ]),
-        expand('{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d), sample=[s for s in config['samples'] if s.startswith('sim_')], tool=[
+        # expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if config['samples'][s]], tool=[
+        #     'flames',
+        #     'alns',
+        #     'trie',
+        # ]),
+        expand('{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d), sample=[s for s in config['samples']], tool=[
             'flames',
             'alns',
             'trie',
@@ -84,6 +79,48 @@ rule make_time:
         outfile.write('\t'.join(record))
         outfile.write('\n')
         outfile.close()
+
+rule download_real_trim:
+    output:
+        'data/real_trim/short-read-barcodes/N_trim.sr_bc.TOP.tsv.gz',
+        'data/real_trim/short-read-barcodes/NOA1_trim.sr_bc.TOP.tsv.gz',
+        'data/real_trim/short-read-barcodes/NOA2_trim.sr_bc.TOP.tsv.gz',
+        'data/real_trim/long-read/N_trim.fq',
+        'data/real_trim/long-read/NOA1_trim.fq',
+        'data/real_trim/long-read/NOA2_trim.fq',
+    params:
+        url = 'https://figshare.com/ndownloader/files/35062999?private_link=6b618c15911ef480bd92',
+    threads:
+        64
+    shell:
+        'wget {params.url} -O data/real_trim.tar && '
+        'tar -vxf data/real_trim.tar -C data/real_trim/ && '
+        'pigz --decompress -p {threads} data/real_trim/long-read/* && '
+        'rm data/real_trim.tar'
+
+rule download_simulation:
+    output:
+        'data/simulation/short-reads/S/hg_100_S1_L001_R1_001.fastq.gz',
+        'data/simulation/short-reads/S/hg_100_S1_L001_R2_001.fastq.gz',
+        'data/simulation/long-reads/S_lr.fq',
+        'data/simulation/short-reads/M/hg_100_S1_L001_R1_001.fastq.gz',
+        'data/simulation/short-reads/M/hg_100_S1_L001_R2_001.fastq.gz',
+        'data/simulation/long-reads/M_lr.fq',
+        'data/simulation/short-reads/L/hg_100_S1_L001_R1_001.fastq.gz',
+        'data/simulation/short-reads/L/hg_100_S1_L001_R2_001.fastq.gz',
+        'data/simulation/long-reads/L_lr.fq',
+    params:
+        url = 'https://figshare.com/ndownloader/files/35076283?private_link=7d7078977a735fef9e57',
+    threads:
+        64
+    shell:
+        'wget {params.url} -O data/sim.tar && \\\n'
+        'tar -vxf data/sim.tar -C data/simulation/ && \\\n'
+        'pigz --decompress -p {threads} data/simulation/long-reads/*gz && \\\n'
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/S_lr.fa > data/simulation/long-reads/S_lr.fq &&\\\n'
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/M_lr.fa > data/simulation/long-reads/M_lr.fq &&\\\n'
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/L_lr.fa > data/simulation/long-reads/L_lr.fq &&\\\n'
+        'rm data/simulation/long-reads/*_lr.fa data/sim.tar'
 
 rule extract_lr_br:
     input:
@@ -108,6 +145,8 @@ rule extract_lr_br:
 rule extract_sr_br:
     input:
         bam = '{}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam'.format(clrg_d),
+    wildcard_constraints:
+        sample = '|'.join([re.escape(s) for s in config['samples'] if 'sr_fastq_dir' in config['samples'][s]]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d)),
     threads:
@@ -132,6 +171,8 @@ rule select_sr_bc:
         script = config['exec']['select_sr_bc'],
         tsv = '{}/{{sample}}/{{sample}}.sr_bc.tsv.gz'.format(extr_d),
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
+    wildcard_constraints:
+        sample = '|'.join([re.escape(s) for s in config['samples'] if 'sr_fastq_dir' in config['samples'][s]]+['^$'])
     output:
         tsv = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d)),
         plot = protected('{}/{{sample}}/{{sample}}.sr_bc.TOP.pdf'.format(extr_d)),
@@ -146,7 +187,8 @@ rule match_aln:
     input:
         script  = config['exec']['match_aln'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
-        sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        # sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        sr_tsv = lambda wildcards: config['samples'][wildcards.sample].get('top_bc', '{e}/{s}/{s}.sr_bc.TOP.tsv.gz'.format(e=extr_d,s=wildcards.sample)),
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d)),
@@ -163,7 +205,8 @@ rule match_trie:
     input:
         script  = config['exec']['match_trie'],
         lr_tsv = '{}/{{sample}}/{{sample}}.lr_bc.tsv.gz'.format(extr_d),
-        sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        # sr_tsv = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        sr_tsv = lambda wildcards: config['samples'][wildcards.sample].get('top_bc', '{e}/{s}/{s}.sr_bc.TOP.tsv.gz'.format(e=extr_d,s=wildcards.sample)),
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         lr_tsv = protected('{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d)),
@@ -176,51 +219,6 @@ rule match_trie:
         'GNU_TIME=$(which time) && $GNU_TIME -f "{rule}\\t%e\\t%U\\t%M\\t{threads}" -a -o {input.time} '
         '{input.script} -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}'
 
-rule validate_trie:
-    input:
-        lr_aln_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
-        lr_trie_tsv = '{}/{{sample}}/{{sample}}.lr_bc_matches.TRIE.tsv.gz'.format(extr_d),
-    output:
-        check = '{}/{{sample}}/{{sample}}.lr_bc_matches.Validation.txt'.format(extr_d),
-    threads:
-        1
-    resources:
-        mem  = "250G",
-        time = 60*6-1,
-    run:
-        lr = dict()
-        for l in tqdm(gzip.open(input.lr_aln_tsv, 'rt')):
-            l = l.rstrip('\n').split('\t')
-            rid = l[0]
-            if l[4] !='':
-                matches = tuple(sorted(l[4].split(',')))
-            else:
-                matches = tuple()
-            assert len(matches) == int(l[2])
-            assert not rid in lr, (rid,l)
-            lr[rid] = dict(
-                aln=((l[1],matches)),
-                trie=(('inf'),tuple()),
-            )
-        for l in tqdm(gzip.open(input.lr_trie_tsv, 'rt')):
-            l = l.rstrip('\n').split('\t')
-            rid = l[0]
-            if l[4] !='':
-                matches = tuple(sorted(l[4].split(',')))
-            else:
-                matches = tuple()
-            assert len(matches) == int(l[2])
-            lr[rid]['trie'] = (l[1],matches)
-        C = Counter(
-            (X['aln']==X['trie'], X['aln'][0], len(X['aln'][1])<2, X['trie'][0], len(X['trie'][1])<2,) for X in lr.values()
-        )
-        outfile = open(output.check, 'w+')
-        outfile.write('match\taln_e\taln_u\ttrie_e\ttrie_u\t#\t%\n')
-        for k,v in sorted(C.items(), key=lambda x:x[1], reverse=True):
-            k = '\t'.join(str(x) for x in k)
-            outfile.write(f'{k}\t{v}\t{v/len(lr):.2%}\n')
-        outfile.close()
-        
 rule cellranger_count:
     input:
         sr_fastq_dir = lambda wildcards: config['samples'][wildcards.sample]['sr_fastq_dir'],
@@ -255,7 +253,8 @@ rule flames:
     input:
         script = 'extern/FLAMES/src/bin/match_cell_barcode',
         reads  = lambda wildcards: config['samples'][wildcards.sample]['reads'],
-        whitelist = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        # whitelist = '{}/{{sample}}/{{sample}}.sr_bc.TOP.tsv.gz'.format(extr_d),
+        whitelist = lambda wildcards: config['samples'][wildcards.sample].get('top_bc', '{e}/{s}/{s}.sr_bc.TOP.tsv.gz'.format(e=extr_d,s=wildcards.sample)),
         time = ancient('{}/{{sample}}/gtime.tsv'.format(bnch_d))
     output:
         csv   = protected('{}/{{sample}}/{{sample}}.match.csv'.format(flames_d)),
@@ -279,8 +278,8 @@ rule convert_flames:
         tsv = protected('{}/{{sample}}.flames.tsv.gz'.format(eval_d)),
     run:
         outfile = gzip.open(output.tsv, 'wt+')
-        for l in gzip.open(input.fastq,'rt'):
-            if l[0]!='@':
+        for idx,l in tqdm(enumerate(gzip.open(input.fastq,'rt'))):
+            if idx%4!=0:
                 continue
             bc,rname = l.rstrip().split()
             bc = bc.lstrip('@')
@@ -312,9 +311,10 @@ rule convert_alns:
             outfile.write(f'{l[0]}\t{l[4]}\n')
         outfile.close()
 
-rule evaluate:
+rule evaluate_sim:
     input:
-        truth_tsv = '{}/{{sample}}.truth.tsv.gz'.format(eval_d),
+        # truth_tsv = '{}/{{sample}}.truth.tsv.gz'.format(eval_d),
+        truth_tsv = lambda wildcards: config['samples'][wildcards.sample].get('truth', '{}/{{sample}}.truth.tsv.gz'.format(eval_d)),
         tool_tsv = '{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d),
     output:
         stats = protected('{}/{{sample}}.{{tool}}.stats'.format(eval_d)),

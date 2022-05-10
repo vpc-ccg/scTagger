@@ -18,9 +18,63 @@ gene_cell_seed_sr_lr:
     - '20000-5000-42-150000000-5000000'
 
 # sim_samples:
-#     - N1
+#     - N
 
 samples:
+    sim_S:
+        ref: homo_sapiens
+        reads:
+            - data/simulation/long-reads/S_lr.fq
+        truth:
+            data/simulation/truth/S.truth.tsv.gz
+        sr_fastq_dir:
+            data/simulation/short-reads/S
+        sr_fastq_prefix:
+            hg_100
+        sr_reads:
+            R1: data/simulation/short-reads/S/hg_100_S1_L001_R1_001.fastq.gz
+            R2: data/simulation/short-reads/S/hg_100_S1_L001_R2_001.fastq.gz
+    sim_M:
+        ref: homo_sapiens
+        reads:
+            - data/simulation/long-reads/M_lr.fq
+        truth:
+            data/simulation/truth/M.truth.tsv.gz
+        sr_fastq_dir:
+            data/simulation/short-reads/M
+        sr_fastq_prefix:
+            hg_100
+        sr_reads:
+            R1: data/simulation/short-reads/M/hg_100_S1_L001_R1_001.fastq.gz
+            R2: data/simulation/short-reads/M/hg_100_S1_L001_R2_001.fastq.gz
+    sim_L:
+        ref: homo_sapiens
+        reads:
+            - data/simulation/long-reads/L_lr.fq
+        truth:
+            data/simulation/truth/L.truth.tsv.gz
+        sr_fastq_dir:
+            data/simulation/short-reads/L
+        sr_fastq_prefix:
+            hg_100
+        sr_reads:
+            R1: data/simulation/short-reads/L/hg_100_S1_L001_R1_001.fastq.gz
+            R2: data/simulation/short-reads/L/hg_100_S1_L001_R2_001.fastq.gz
+    NOA1_trim:
+        reads:
+            - data/real_trim/long-read/NOA1_trim.fq
+        top_bc:
+            - data/real_trim/short-read-barcodes/NOA1_trim.sr_bc.TOP.tsv.gz
+    NOA2_trim:
+        reads:
+            - data/real_trim/long-read/NOA2_trim.fq
+        top_bc:
+            - data/real_trim/short-read-barcodes/NOA2_trim.sr_bc.TOP.tsv.gz
+    N_trim:
+        reads:
+            - data/real_trim/long-read/N_trim.fq
+        top_bc:
+            - data/real_trim/short-read-barcodes/N_trim.sr_bc.TOP.tsv.gz
     NOA1:
         ref: homo_sapiens
         reads:
@@ -63,14 +117,14 @@ samples:
 
 references:
     homo_sapiens:
-        annot          : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
-        transcriptome  : /groups/hachgrp/annotations/cDNA/97/Homo_sapiens.GRCh38.cdna.all.fa
-        genome         : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
-        genome_fai     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
-        cellranger_ref : /groups/hachgrp/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
+        annot          : data/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
+        transcriptome  : data/annotations/cDNA/97/Homo_sapiens.GRCh38.cdna.all.fa
+        genome         : data/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
+        genome_fai     : data/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
+        cellranger_ref : data/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
 
 salmon_refs:
-    annot          : /groups/hachgrp/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
-    transcriptome  : /groups/hachgrp/annotations/cDNA/GENCODE/38/human.gencode.v38.pc_transcripts.fa
-    genome         : /groups/hachgrp/annotations/DNA/GENCODE/38/human.GRCh38.primary_assembly.genome.fa
-    whitelist      : extern/3M-february-2018.txt
+    annot          : data/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
+    transcriptome  : data/annotations/cDNA/GENCODE/38/human.gencode.v38.pc_transcripts.fa
+    genome         : data/annotations/DNA/GENCODE/38/human.GRCh38.primary_assembly.genome.fa
+    whitelist      : data/annotations/3M-february-2018.txt

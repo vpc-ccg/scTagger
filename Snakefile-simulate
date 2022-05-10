@@ -83,7 +83,7 @@ rule make_minnow:
 
 rule wget_whitelist:
     output:
-        'extern/3M-february-2018.txt'
+        config['salmon_refs']['whitelist']
     params:
         url = 'https://github.com/10XGenomics/cellranger/blob/5f5a6293bbc067e1965e50f0277286914b96c908/lib/python/cellranger/barcodes/3M-february-2018.txt.gz'
     shell:
