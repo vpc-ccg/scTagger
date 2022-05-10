@@ -54,11 +54,7 @@ rule all:
             'alns',
             'trie',
         ]),
-        # expand('{}/{{sample}}.{{tool}}.stats'.format(eval_d), sample=[s for s in config['samples'] if config['samples'][s]], tool=[
-        #     'flames',
-        #     'alns',
-        #     'trie',
-        # ]),
+        expand('{}/{{sample}}.all_vs_all.stats'.format(eval_d), sample=[s for s in config['samples'] if not s.startswith('sim_')]),
         expand('{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d), sample=[s for s in config['samples']], tool=[
             'flames',
             'alns',
@@ -114,12 +110,12 @@ rule download_simulation:
     threads:
         64
     shell:
-        'wget {params.url} -O data/sim.tar && \\\n'
-        'tar -vxf data/sim.tar -C data/simulation/ && \\\n'
-        'pigz --decompress -p {threads} data/simulation/long-reads/*gz && \\\n'
-        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/S_lr.fa > data/simulation/long-reads/S_lr.fq &&\\\n'
-        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/M_lr.fa > data/simulation/long-reads/M_lr.fq &&\\\n'
-        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/L_lr.fa > data/simulation/long-reads/L_lr.fq &&\\\n'
+        'wget {params.url} -O data/sim.tar && '
+        'tar -vxf data/sim.tar -C data/simulation/ && '
+        'pigz --decompress -p {threads} data/simulation/long-reads/*gz && '
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/S_lr.fa > data/simulation/long-reads/S_lr.fq && '
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/M_lr.fa > data/simulation/long-reads/M_lr.fq && '
+        'awk \'BEGIN{{q=""; for (i=0;i<100000;i++)q=q"!"}} NR%2==1{{print "@"substr($0,2)}} NR%2==0 {{print $0; print "+";  print substr(q,1,length($0))}}\' data/simulation/long-reads/L_lr.fa > data/simulation/long-reads/L_lr.fq && '
         'rm data/simulation/long-reads/*_lr.fa data/sim.tar'
 
 rule extract_lr_br:
@@ -313,7 +309,6 @@ rule convert_alns:
 
 rule evaluate_sim:
     input:
-        # truth_tsv = '{}/{{sample}}.truth.tsv.gz'.format(eval_d),
         truth_tsv = lambda wildcards: config['samples'][wildcards.sample].get('truth', '{}/{{sample}}.truth.tsv.gz'.format(eval_d)),
         tool_tsv = '{}/{{sample}}.{{tool}}.tsv.gz'.format(eval_d),
     output:
@@ -353,4 +348,71 @@ rule evaluate_sim:
         outfile = open(output.stats, 'w+')
         for k,v in stats.items():
             outfile.write(f'{k}:\t{v}\t({v/len(rname_to_bc):.2%})\n')
+        outfile.close()
+
+rule evaluate_real:
+    input:
+        flames_tsv = '{}/{{sample}}.flames.tsv.gz'.format(eval_d),
+        trie_tsv   = '{}/{{sample}}.trie.tsv.gz'.format(eval_d),
+        alns_matches = '{}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz'.format(extr_d),
+    output:
+        stats = protected('{}/{{sample}}.all_vs_all.stats'.format(eval_d)),
+    wildcard_constraints:
+        sample = '|'.join([re.escape(s) for s in config['samples'] if not s.startswith('sim_')]),
+    run:
+        read_details = dict()
+        print(f'Reading {input.alns_matches}')
+        for l in tqdm(gzip.open(input.alns_matches, 'tr')):
+            rid,dist,count,segment,barcodes = l.rstrip('\n').split('\t')
+            dist = float(dist)
+            count = int(count)
+            barcodes = tuple(sorted(b if b < rev_compl(b) else rev_compl(b) for b in barcodes.split(',')))
+            if barcodes == ('',):
+                barcodes = tuple()
+            assert len(barcodes)==count,(count,barcodes)
+            assert not rid in read_details, (rid,l)
+            read_details[rid] = dict(
+                dist=dist,
+                count=count,
+                sctagger=tuple(),
+                flames=tuple(),
+                brute=barcodes,
+            )
+        for tsv,n in ((input.trie_tsv,'sctagger'),(input.flames_tsv,'flames'),):
+            print(f'Reading {tsv}')
+            for l in tqdm(gzip.open(tsv, 'tr'), total=len(read_details)):
+                rid,barcodes = l.rstrip('\n').split('\t')
+                barcodes = tuple(sorted(b if b < rev_compl(b) else rev_compl(b) for b in barcodes.split(',')))
+                if barcodes == ('',):
+                    barcodes = tuple()
+                read_details[rid][n] = barcodes            
+        
+        c = Counter()
+        for details in tqdm(read_details.values(), total=len(read_details)):
+            match = (
+                'Y' if len(details['brute'])!=0 else 'N',
+                'Y' if len(details['brute'])==1 else 'N',        
+                'Y' if len(details['sctagger'])!=0 and details['sctagger'] == details['brute'] else 'N',        
+                'Y' if len(details['flames'])!=0   and details['flames'] == details['brute'] else 'N',        
+                'Y' if len(details['sctagger'])!=0 and details['flames'] == details['brute'] else 'N',        
+            )
+            c[match]+=1
+
+        outfile = open(output.stats, 'w+')
+        record = [
+            'Brute_matched?',
+            'Brute_match_unique?',
+            'scTagger=Brute?',
+            'FLAMES=Brute?',
+            'scTagger=FLAMES?',
+            '%LRs',
+            '#LRs',
+        ]
+        outfile.write('\t'.join(record))
+        outfile.write('\n')
+        
+        for states,count,percent in sorted([(''.join(k),f'{v/sum(c.values()):.1%}', f'{v:,}') for k,v in c.items()], reverse=True):
+            record = [X for X in states] + [count,percent]
+            outfile.write('\t'.join(record))
+            outfile.write('\n')
         outfile.close()

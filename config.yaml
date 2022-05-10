@@ -1,22 +1,27 @@
 outpath:
     analysis
 
-gurobi:
-    license: gurobi.lic
-    timeout: 1
-
-
 exec:
     match_trie    : py/match_lr_bc-trie.py
     match_aln     : py/match_lr_bc-aln.py
     extract_lr_bc : py/extract_lr_bc.py
     select_sr_bc  : py/extract_top_sr_br.py
 
+# For each sample in the sim_samples list, different simulation setups can be used.
+    # Gene: number of genes expresed in the simulation
+    # Cell: number of cells captured in the simulation
+    # Seed: a random seed for reproducibility
+    # SR: number of short-reads to generate
+    # LR: number of long-reads to generate
 gene_cell_seed_sr_lr:
     - '100-50-42-1000000-100000'
     - '3000-500-42-15000000-1000000'
     - '20000-5000-42-150000000-5000000'
 
+# Uncomment the list below to generate your own simulation dataset. 
+    # Only datasets with complete (untrimmed) reads should be used for simulating datasets. 
+    # The provided real datasets are trimmed (contain no RNA and just library barcodes/adapters) and 
+    # thus cannot be used to generated new simulated datasets.
 # sim_samples:
 #     - N
 
@@ -75,6 +80,23 @@ samples:
             - data/real_trim/long-read/N_trim.fq
         top_bc:
             - data/real_trim/short-read-barcodes/N_trim.sr_bc.TOP.tsv.gz
+# Add your own real datasets here. 
+# You can then use these datasets to generate your own simulated datasets by adding the sample name
+# to the sim_samples list up in this file.
+# The cell_count number is used by simulation generation pipeline only.
+    N:
+        ref: homo_sapiens
+        reads:
+            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
+        sr_fastq_dir:
+            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC
+        sr_fastq_prefix:
+            13032_N1
+        sr_reads:
+            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R1_001.fastq.gz
+            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R2_001.fastq.gz
+        cell_count:
+            5000
     NOA1:
         ref: homo_sapiens
         reads:
@@ -101,20 +123,9 @@ samples:
             R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC/13035_D1_S1_L001_R2_001.fastq.gz
         cell_count:
             5000
-    N:
-        ref: homo_sapiens
-        reads:
-            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
-        sr_fastq_dir:
-            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC
-        sr_fastq_prefix:
-            13032_N1
-        sr_reads:
-            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R1_001.fastq.gz
-            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R2_001.fastq.gz
-        cell_count:
-            5000
 
+# You need to download these annotation files. 
+# For Cell Ranger, you will need to build the index used by cellranger to map the short reads
 references:
     homo_sapiens:
         annot          : data/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
@@ -123,6 +134,7 @@ references:
         genome_fai     : data/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
         cellranger_ref : data/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
 
+# These files are used by the Snakemake-simulate pipeline which uses Minnow to simulate 10x Genomics short reads
 salmon_refs:
     annot          : data/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
     transcriptome  : data/annotations/cDNA/GENCODE/38/human.gencode.v38.pc_transcripts.fa
