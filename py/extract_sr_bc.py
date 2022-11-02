@@ -45,7 +45,7 @@ def output_sr_bc(bam, outpath, threads):
 def main():
     args = parse_args()
     print(args, file=sys.stderr)
-    output_sr_bc(args.bam, args.output, args.threads)
+    output_sr_bc(args.input, args.outfile, args.threads)
     
 if __name__ == "__main__":
     main()
