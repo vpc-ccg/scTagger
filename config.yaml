@@ -1,129 +1,28 @@
 outpath:
-    ../../analysis
-
-gurobi:
-    license: gurobi.lic
-    timeout: 1
-
+    test/output
 
 exec:
-    match_trie : py/match_lr_bc-trie.py
-    match_aln : py/match_lr_bc-aln.py
-    split     : py/extract_lr_bc.py
-    select    : py/extract_top_sr_br.py
-    freddie   :
-        split    : extern/freddie/py/freddie_split.py
-        segment  : extern/freddie/py/freddie_segment.py
-        cluster  : extern/freddie/py/freddie_cluster.py
-        isoforms : extern/freddie/py/freddie_isoforms.py
-    seurat:
-        preprocessing: R/preprocessing_pipeline.R
-
-gene_cell_seed_sr_lr:
-    - '100-50-42-1000000-100000'
-    - '3000-500-42-15000000-1000000'
-    - '20000-5000-42-150000000-5000000'
-
-sim_samples:
-    - N1
+    scTagger : ./scTagger.py
 
 samples:
-    C1:
+    s1:
         ref: homo_sapiens
-        reads:
-            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_C1_pass_fastq_concat.fastq
-        sr_fastq_dir:
-            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC
-        sr_fastq_prefix:
-            13035_C1
-        sr_reads:
-            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC/13035_C1_S1_L001_R1_001.fastq.gz
-            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C1_GSC/13035_C1_S1_L001_R2_001.fastq.gz
-        cell_count:
-            5000
-        seurat_config: config_r_C1.yaml
-    # C2:
-    #     ref: homo_sapiens
-    #     reads:
-    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_C2_pass_fastq_concat.fastq
-    #     sr_fastq_dir:
-    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC
-    #     sr_fastq_prefix:
-    #         13035_C2
-    #     sr_reads:
-    #         R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC/13035_C2_S1_L001_R1_001.fastq.gz
-    #         R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_C2_GSC/13035_C2_S1_L001_R2_001.fastq.gz
-    #     cell_count:
-    #         5000
-    #     seurat_config: config_r_C1.yaml
-    D1:
-        ref: homo_sapiens
-        reads:
-            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_D1_pass_fastq_concat.fastq
-        sr_fastq_dir:
-            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC
-        sr_fastq_prefix:
-            13035_D1
-        sr_reads:
-            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC/13035_D1_S1_L001_R1_001.fastq.gz
-            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D1_GSC/13035_D1_S1_L001_R2_001.fastq.gz
-        cell_count:
-            5000
-        seurat_config: config_r_C1.yaml
-    # D2:
-    #     ref: homo_sapiens
-    #     reads:
-    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_D2_pass_fastq_concat.fastq
-    #     sr_fastq_dir:
-    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC
-    #     sr_fastq_prefix:
-    #         13035_D2
-    #     sr_reads:
-    #         R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC/13035_D2_S1_L001_R1_001.fastq.gz
-    #         R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13035_D2_GSC/13035_D2_S1_L001_R2_001.fastq.gz
-    #     cell_count:
-    #         5000
-    #     seurat_config: config_r_C1.yaml
-    N1:
-        ref: homo_sapiens
-        reads:
-            - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N1_pass_fastq_concat.fastq
-        sr_fastq_dir:
-            /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC
-        sr_fastq_prefix:
-            13032_N1
-        sr_reads:
-            R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R1_001.fastq.gz
-            R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N1_GSC/13032_N1_S1_L001_R2_001.fastq.gz
-        cell_count:
-            5000
-        seurat_config: config_r_C1.yaml
-    # N2:
-    #     ref: homo_sapiens
-    #     reads:
-    #         - /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/long-read/PAG34747_N2_pass_fastq_concat.fastq
-    #     sr_fastq_dir:
-    #         /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC
-    #     sr_fastq_prefix:
-    #         13032_N2
-    #     sr_reads:
-    #         R1: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R1_001.fastq.gz
-    #         R2: /groups/hachgrp/projects/tmp-ghazal-single-cell/raw-data/scrna/fastq/13032_N2_GSC/13032_N2_S1_L001_R2_001.fastq.gz
-    #     cell_count:
-    #         5000
-    #     seurat_config: config_r_C1.yaml
+        lr_fastqs:
+            - test/data/lr/TestSample_pass_fastq_concat.fastq
+        sr:
+            I1: test/data/sr/s1/myprefix_S1_L001_I1_001.fastq.gz
+            R1: test/data/sr/s1/myprefix_S1_L001_R1_001.fastq
+            R2: test/data/sr/s1/myprefix_S1_L001_R2_001.fastq
+            dir: test/data/sr/s1/
+            prefix: myprefix
+            cell_count:
+                5000
 
 references:
     homo_sapiens:
-        annot          : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.gtf
-        transcriptome  : /groups/hachgrp/annotations/cDNA/97/Homo_sapiens.GRCh38.cdna.all.fa
-        genome         : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa
-        genome_fai     : /groups/hachgrp/annotations/DNA/97/Homo_sapiens.GRCh38.dna.primary_assembly.fa.fai
-        cellranger_ref : /groups/hachgrp/annotations/CellRanger/refdata-cellranger-GRCh38-1.2.0
-        transcriptome_bed : /groups/hachgrp/annotations/GTF/97/Homo_sapiens.GRCh38.97.24.bed
+        annot          : test/refs/homo_sapiens.annot.gtf
+        genome         : test/refs/homo_sapiens.dna.fa
+        genome_fai     : test/refs/homo_sapiens.dna.fa.fai
+        cellranger_ref : test/refs/homo_sapiens_CellRanger
 
-salmon_refs:
-    annot          : /groups/hachgrp/annotations/GTF/GENCODE/38/human.gencode.v38.annotation.gtf
-    transcriptome  : /groups/hachgrp/annotations/cDNA/GENCODE/38/human.gencode.v38.pc_transcripts.fa
-    genome         : /groups/hachgrp/annotations/DNA/GENCODE/38/human.GRCh38.primary_assembly.genome.fa
-    whitelist      : extern/3M-february-2018.txt
+

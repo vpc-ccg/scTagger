@@ -2,7 +2,7 @@
 gurobi.lic
 .snakemake/
 .vscode/
-extern/3M-february-2018.txt
+test/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
