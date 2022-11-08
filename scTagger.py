@@ -3,19 +3,17 @@ import sys
 import argparse
 from multiprocessing import Pool, RawArray
 import gzip
-from collections import deque
+from collections import deque, Counter
+from math import ceil
 
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import matplotlib.ticker as mtick
 import matplotlib.pyplot as plt
-from tqdm import tqdm
-import edlib
-from math import ceil
-from collections import Counter
-import psutil
-import pysam
 
+import edlib
+import pysam
 
 def parse_args():
     parser = argparse.ArgumentParser(description="scTagger pipeline!")
@@ -48,7 +46,7 @@ def parse_args():
     parser_lr_bc.add_argument("--num-bp-after", type=int, default=20,
                               help="Number of bases after the end of the SR adapter alignment to generate. Default: 20")
 
-    parser_top_sr = subparsers.add_parser('extract_top_sr_bc')
+    parser_top_sr = subparsers.add_parser('extract_sr_bc')
     parser_top_sr.add_argument("-i", "--input", type=str, required=True,
                                help="Input file")
     parser_top_sr.add_argument("-o", "--outfile", type=str, default=None,
@@ -112,7 +110,7 @@ def parse_args():
         args.ranges = ranges
         assert args.threads > 0
 
-    if args.subcommand == 'extract_top_sr_bc':
+    if args.subcommand == 'extract_sr_bc':
         assert 0 <= args.thresh <= 1
         assert 0 < args.step_size
         assert 0 < args.max_barcode_cnt
@@ -386,10 +384,32 @@ def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
     plt.legend(plot_lines, [l.get_label() for l in plot_lines], loc='center right')
     plt.savefig(outfile)
 
+
+
 def extract_sr_barcode(bamfile, threads):
+    print(f'\n====\nExtracting SR barcodes from {bamfile}:')
     barcodes = list()
     total = 0
-    for aln in tqdm(pysam.AlignmentFile(bamfile, 'rb', threads=threads)):
+    alns_per_contig = {x.contig:x.total for x in pysam.AlignmentFile(bamfile, 'rb').get_index_statistics()}
+    imap_args = [
+        (bamfile,x['SN'])
+        for x in pysam.AlignmentFile(bamfile, 'rb').header['SQ']
+    ] 
+    p = Pool(threads)
+    with tqdm(total=sum(alns_per_contig.values())) as tqdm_bar:  
+        for contig,c_total,c_barcodes in tqdm(p.imap_unordered(read_bam_contig, imap_args, chunksize=1), total=len(imap_args)):
+            tqdm_bar.update(alns_per_contig[contig])
+            barcodes.extend(c_barcodes)
+            total += c_total
+    p.close()        
+    return total,barcodes
+
+
+def read_bam_contig(args):
+    bamfile, contig = args
+    barcodes = list()
+    total = 0
+    for aln in pysam.AlignmentFile(bamfile, 'rb').fetch(contig=contig):
         if aln.flag > 256:
             continue
         tags = dict(aln.tags)
@@ -398,11 +418,12 @@ def extract_sr_barcode(bamfile, threads):
         if C == 'NA':
             continue
         barcodes.append(C)
+    return contig,total,barcodes
 
-    return total,barcodes
-
-def extract_top_sr_bc(args):
+def extract_sr_bc(args):
     total, barcodes = extract_sr_barcode(args.input, args.threads)
+
+    print("\n=====\nCounting and sorting barcodes")
     barcode_cnts = Counter(barcodes)
     barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
     barcodes,barcode_cnts = tuple(zip(*barcode_cnts_tuple))
@@ -431,11 +452,12 @@ def extract_top_sr_bc(args):
             last_idx=last_idx,
             outfile=args.plotfile,
         )
+    print(f"\n=====\nWriting the top {last_idx} barcodes")
     if args.outfile:
         outfile = gzip.open(args.outfile, 'wt+')
     else:
         outfile = sys.stdout
-    for b, c in zip(barcodes[:last_idx],barcode_cnts[:last_idx]):
+    for b, c in tqdm(zip(barcodes[:last_idx],barcode_cnts[:last_idx]), total=last_idx):
         outfile.write(f'{b}\t{c}\n')
     outfile.close()
 
@@ -451,9 +473,6 @@ barcodes_rc = None
 lr_segs = None
 lr_segs_idxs = None
 lr_names = None
-
-def mem_use_gb():
-    return psutil.Process().memory_info().rss / (1024 ** 3)
 
 
 class Trie(object):
@@ -696,8 +715,6 @@ def match_tire(args):
         max_error=args.max_error,
         threads=args.threads,
     )
-    memory_useage_GB = mem_use_gb()
-    print(f"Memory usage: {memory_useage_GB:.2f}GB")
 
     if args.outfile:
         if args.outfile.endswith('gz'):
@@ -728,8 +745,8 @@ def main():
     if args.subcommand == 'extract_lr_bc':
         extract_lr_bc(args)
 
-    if args.subcommand == 'extract_top_sr_bc':
-        extract_top_sr_bc(args)
+    if args.subcommand == 'extract_sr_bc':
+        extract_sr_bc(args)
 
     if args.subcommand == 'match_trie':
         match_tire(args)

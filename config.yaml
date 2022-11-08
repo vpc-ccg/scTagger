@@ -1,0 +1,28 @@
+outpath:
+    test/output
+
+exec:
+    scTagger : ./scTagger.py
+
+samples:
+    s1:
+        ref: homo_sapiens
+        lr_fastqs:
+            - test/data/lr/TestSample_pass_fastq_concat.fastq
+        sr:
+            I1: test/data/sr/s1/myprefix_S1_L001_I1_001.fastq.gz
+            R1: test/data/sr/s1/myprefix_S1_L001_R1_001.fastq
+            R2: test/data/sr/s1/myprefix_S1_L001_R2_001.fastq
+            dir: test/data/sr/s1/
+            prefix: myprefix
+            cell_count:
+                5000
+
+references:
+    homo_sapiens:
+        annot          : test/refs/homo_sapiens.annot.gtf
+        genome         : test/refs/homo_sapiens.dna.fa
+        genome_fai     : test/refs/homo_sapiens.dna.fa.fai
+        cellranger_ref : test/refs/homo_sapiens_CellRanger
+
+
