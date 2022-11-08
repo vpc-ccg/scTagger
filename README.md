@@ -4,16 +4,21 @@ scTagger matches barcodes of short- and long-reads of single-cell RNA-seq experi
 ## Installation
 
 
-### Running manually
-scTagger has a single python file in the py directory containing different functions to match long-reads and short-reads barcodes. 
+### Running with Snakemake
+We provided a simple `Snakefile` alongside a `config.yaml` file that runs the three stages of scTagger as well as Cell Ranger (assumes Cell Ranger is in path). 
 
-The hole pipeline contains three steps that you can run each part separately:
+
+### Running manually
+scTagger has a single python script containing different functions to match long-reads and short-reads barcodes. 
+
+The whole pipeline contains three steps that you can run each part separately:
 
 #### Extract long-reads segment
-The first step of the scTagger pipeline is to extract a segment where the probability of seeing a barcode is more than in other places.  To run this step, you can use the following command. 
+The first step of the scTagger pipeline is to extract a segment where the probability of seeing a barcode is more than in other places.
+To run this step, you can use the following command. 
 
 ```
-py/scTagger.py extract_lr_bc -r "path/to/long/read/fastq" -o "path/to/output/file" -p "path/to/output/plots"
+./scTagger.py extract_lr_bc -r "path/to/long/read/fastq" -o "path/to/output/file" -p "path/to/output/plots"
 ```
 
 **Augments**
@@ -43,7 +48,7 @@ py/scTagger.py extract_lr_bc -r "path/to/long/read/fastq" -o "path/to/output/fil
 The second step is to extract the top short-reads barcodes that cover most of the reads.
 
 ```
-py/scTagger.py extract_top_sr_bc -i "path/to/bam/file" -o "path/to/output/file" -p "path/to/output/plot"
+./scTagger.py extract_top_sr_bc -i "path/to/bam/file" -o "path/to/output/file" -p "path/to/output/plot"
 ```
 
 **Arguments**
@@ -66,7 +71,7 @@ py/scTagger.py extract_top_sr_bc -i "path/to/bam/file" -o "path/to/output/file" 
 #### Match long-reads segment with short-reads barcode
 The last step is to match long read segments with selected barcodes from short reads
 ```
-py/scTagger.py match_trie -lr "path/to/output/extract/long-read/segment" -sr "path/to/output/extract/top/short-read" -o "path/to/output/file" -t "number of threads"
+./scTagger.py match_trie -lr "path/to/output/extract/long-read/segment" -sr "path/to/output/extract/top/short-read" -o "path/to/output/file" -t "number of threads"
 ```
 
 **Arguments**
@@ -91,8 +96,11 @@ py/scTagger.py match_trie -lr "path/to/output/extract/long-read/segment" -sr "pa
   *  Fourth column is the long-read segment, and the Fifth column is a list of all short-read barcodes with minimum edit distance 
 * A bar plot that shows the number of long reads by the minimum edit distance of their match barcode
 
+## Citing scTaggger
+scTagger was first accepted to RECOMB-seq 2022 and is now published by iScience:
+
+*Ghazal Ebrahimi, Baraa Orabi, Meghan Robinson, Cedric Chauve, Ryan Flannigan, and Faraz Hach. "Fast and accurate matching of cellular barcodes across short-and long-reads of single-cell RNA-seq experiments." iScience (2022). DOI:[10.1016/j.isci.2022.104530](https://doi.org/10.1016/j.isci.2022.104530)*
 
 
-Note: This is an active development branch.
 Please check the [paper](https://github.com/vpc-ccg/scTagger/tree/paper) branch of this repository for the archived paper experiements and implementation. 
 
