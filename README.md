@@ -3,7 +3,7 @@ scTagger matches cellular barcodes from 10x Genomics single cell experiments wit
 
 # Installation
 
-To install the needed dependencies, use conda (or mamba for faster environment resolution) to create and activate the needed environment:
+To install the needed dependencies, use conda (or mamba for a faster environment resolution) to create and activate the needed environment:
 
 ```bash
 mamba env create -f envs/run.yml
