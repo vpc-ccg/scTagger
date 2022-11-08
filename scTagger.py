@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import edlib
 import pysam
 
+
 def parse_args():
     parser = argparse.ArgumentParser(description="scTagger pipeline!")
     subparsers = parser.add_subparsers(dest='subcommand')
@@ -54,7 +55,7 @@ def parse_args():
     parser_top_sr.add_argument("-p", "--plotfile", type=str, default=None,
                                help="Path to plot file")
     parser_top_sr.add_argument("-t", "--threads", default=1, type=int,
-                              help="Number of threads. Default: 1")
+                               help="Number of threads. Default: 1")
     parser_top_sr.add_argument("--thresh", type=float, default=0.005,
                                help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
     parser_top_sr.add_argument("--step-size", type=int, default=1000,
@@ -104,7 +105,8 @@ def parse_args():
             else:
                 assert False, (strand)
             for i in np.arange(s, e):
-                assert not i in ranges_dicts[ranges_idx], (ranges_idx, i, ranges_dicts[ranges_idx])
+                assert not i in ranges_dicts[ranges_idx], (
+                    ranges_idx, i, ranges_dicts[ranges_idx])
                 ranges_dicts[ranges_idx][i] = len(ranges[ranges_idx])
             ranges[ranges_idx].append((s, e))
         args.ranges = ranges
@@ -129,8 +131,10 @@ rev_compl_l[ord('C')] = 'G'
 rev_compl_l[ord('G')] = 'C'
 rev_compl_l[ord('T')] = 'A'
 
+
 def rev_compl(s):
     return ''.join(rev_compl_l[ord(c)] for c in reversed(s))
+
 
 def read_fastqs(fastqs, gzipped):
     rnames = list()
@@ -141,19 +145,20 @@ def read_fastqs(fastqs, gzipped):
             f = gzip.open(fastq, 'rt')
         else:
             f = open(fastq, 'r')
-        for idx,l in tqdm(enumerate(f)):
+        for idx, l in tqdm(enumerate(f)):
             if idx % 4 == 0:
                 rnames.append(l.split()[0][1:])
             if idx % 4 == 1:
                 seqs.append(l.rstrip())
-    return rnames,seqs
+    return rnames, seqs
+
 
 def get_alns(seq):
     d = -1
     s = 'NA'
     locs = ['NA']
-    aln_1 = edlib.align(a1, seq,'HW', 'locations')
-    aln_2 = edlib.align(a2, seq,'HW', 'locations')
+    aln_1 = edlib.align(a1, seq, 'HW', 'locations')
+    aln_2 = edlib.align(a2, seq, 'HW', 'locations')
     if aln_1['editDistance'] == aln_2['editDistance']:
         pass
     elif aln_1['editDistance'] < aln_2['editDistance']:
@@ -170,6 +175,7 @@ def get_alns(seq):
         locs,
     )
 
+
 def get_ranges(data):
     ranges = list()
     min_l = min(data)
@@ -177,13 +183,14 @@ def get_ranges(data):
     L = np.arange(min_l, max_l+1)
     F = np.zeros(max_l-min_l+1)
     for l in data:
-        F[l-min_l]+=1
+        F[l-min_l] += 1
     T = np.sum(F)
     while True:
         PEAK = np.argmax(F)
-        neighborhood_sum = sum(F[max(0,PEAK-20):min(PEAK+20,len(F))])
-        print(f'--> {neighborhood_sum/T: 5.2%} of strend reads fall around {L[PEAK]}', file=sys.stderr)
-        if sum(F[max(0,PEAK-20):min(PEAK+20,len(F))]) < 0.01*T:
+        neighborhood_sum = sum(F[max(0, PEAK-20):min(PEAK+20, len(F))])
+        print(
+            f'--> {neighborhood_sum/T: 5.2%} of strend reads fall around {L[PEAK]}', file=sys.stderr)
+        if sum(F[max(0, PEAK-20):min(PEAK+20, len(F))]) < 0.01*T:
             break
         Q = deque()
         Q.append(PEAK)
@@ -192,21 +199,22 @@ def get_ranges(data):
         while len(Q) > 0:
             i = Q.popleft()
             F[i] = 0
-            if i<= PEAK and i-1>0 and F[i-1] > T*0.001:
+            if i <= PEAK and i-1 > 0 and F[i-1] > T*0.001:
                 Q.append(i-1)
-                first=i-1
-            if i>= PEAK and i+1<len(F) and F[i+1] > T*0.001:
+                first = i-1
+            if i >= PEAK and i+1 < len(F) and F[i+1] > T*0.001:
                 Q.append(i+1)
-                last=i+1
-        for i in range(max(0,first-20),min(last+20,len(F))):
-            F[i]=0
-        ranges.append((L[first],L[last]))
+                last = i+1
+        for i in range(max(0, first-20), min(last+20, len(F))):
+            F[i] = 0
+        ranges.append((L[first], L[last]))
     return ranges
+
 
 def get_possible_ranges(alns):
     data_f = list()
     data_r = list()
-    for s,d,locs in alns:
+    for s, d, locs in alns:
         if d < 0 or d > 5:
             continue
         if s == '+':
@@ -219,7 +227,7 @@ def get_possible_ranges(alns):
     print(f'Found these ranges on + strand:\t{ranges_f}', file=sys.stderr)
     ranges_r = get_ranges(data_r)
     print(f'Found these ranges on - strand:\t{ranges_r}', file=sys.stderr)
-    return ranges_f,ranges_r
+    return ranges_f, ranges_r
 
 
 def set_global_range_dicts(ranges):
@@ -227,33 +235,35 @@ def set_global_range_dicts(ranges):
     ranges_dicts = list()
     for R in ranges:
         ranges_dict = dict()
-        for idx,(s,e) in enumerate(R):
-            for i in np.arange(s,e):
-                assert not i in ranges_dict, (i,ranges_dict)
+        for idx, (s, e) in enumerate(R):
+            for i in np.arange(s, e):
+                assert not i in ranges_dict, (i, ranges_dict)
                 ranges_dict[i] = idx
         ranges_dicts.append(ranges_dict)
 
 
 def get_lr_bc_alns(seqs, threads):
-    print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
+    print(
+        f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
     alns = list()
     with Pool(threads) as p:
-        for s,d,locs in p.imap(get_alns, seqs, chunksize=10000):
-            alns.append((s,d,locs))
+        for s, d, locs in p.imap(get_alns, seqs, chunksize=10000):
+            alns.append((s, d, locs))
     return alns
 
 
 def get_filter_alns(alns, threads):
-    print(f'Filtering alignments using ranges on {threads} threads', file=sys.stderr)
+    print(
+        f'Filtering alignments using ranges on {threads} threads', file=sys.stderr)
     fin_alns = list()
     with Pool(threads) as p:
-        for dist,loc,s,e in tqdm(p.imap(filter_aln, alns, chunksize=10000), total=len(alns)):
-            fin_alns.append((dist,loc,s,e))
+        for dist, loc, s, e in tqdm(p.imap(filter_aln, alns, chunksize=10000), total=len(alns)):
+            fin_alns.append((dist, loc, s, e))
     return fin_alns
 
 
 def filter_aln(aln):
-    strand,dist,locs = aln
+    strand, dist, locs = aln
     range_idx = int(strand == '-')
     range_hits = {ranges_dicts[range_idx].get(l, -1) for l in locs}
     if -1 in range_hits or len(range_hits) != 1:
@@ -269,49 +279,55 @@ def filter_aln(aln):
             s = min(locs)-num_bp_after
             e = min(0, max(locs)+2)
             loc = e
-    return dist,loc,s,e
+    return dist, loc, s, e
 
 
 def get_lr_bc_alns(seqs, threads):
-    print(f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
+    print(
+        f'Aligning {a1} to {len(seqs)} reads on {threads} threads', file=sys.stderr)
     alns = list()
     with Pool(threads) as p:
-        for s,d,locs in tqdm(p.imap(get_alns, seqs, chunksize=10000), total=len(seqs)):
-            alns.append((s,d,locs))
+        for s, d, locs in tqdm(p.imap(get_alns, seqs, chunksize=10000), total=len(seqs)):
+            alns.append((s, d, locs))
     return alns
 
 
 def output_matches(rnames, seqs, alns, outfile):
     print(f'Writng to {outfile}', file=sys.stderr)
-    for rname,seq,(dist,loc,s,e) in tqdm(zip(rnames, seqs, alns), total=len(rnames)):
+    for rname, seq, (dist, loc, s, e) in tqdm(zip(rnames, seqs, alns), total=len(rnames)):
         outfile.write(f'{rname}\t{dist}\t{loc}\t{seq[s:e or None]}\n')
+
 
 def show_plots_extract_lr_bc(rnames, alns, outfile):
     names = ["read_id", "distance"]
     data = pd.DataFrame([
-        (r,d) for r,(d,_,_,_) in zip(rnames,alns)
+        (r, d) for r, (d, _, _, _) in zip(rnames, alns)
     ], columns=names)
 
     new_data = data.groupby("distance").count().reset_index()
-    new_data = new_data.rename(index={1:"0", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8",
+    new_data = new_data.rename(index={1: "0", 2: "1", 3: "2", 4: "3", 5: "4", 6: "5", 7: "6", 8: "7", 9: "8",
                                       10: "9", 11: "10", 0: 'NA'})
 
     target_row = 0
-    idx =  [i for i in range(len(new_data)) if i != target_row] + [target_row]
+    idx = [i for i in range(len(new_data)) if i != target_row] + [target_row]
     new_data = new_data.iloc[idx]
     new_data["read_id"].cumsum(axis=0)
     new_data["cumSum"] = new_data["read_id"].cumsum(axis=0)
-    new_data["cumSumPer"] = new_data["read_id"].cumsum(axis=0) / len(data) * 100
-    fig = plt.figure(figsize=(10,5))
+    new_data["cumSumPer"] = new_data["read_id"].cumsum(
+        axis=0) / len(data) * 100
+    fig = plt.figure(figsize=(10, 5))
 
     ax = fig.add_subplot(111)
     ax2 = ax.twinx()
 
     width = 0.2
 
-    new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
-    new_data.cumSum.plot(kind='bar', color='blue', ax=ax, width=width, position=0)
-    new_data.cumSumPer.plot(kind='bar', color='blue', ax=ax2, width=width, position=0)
+    new_data.read_id.plot(kind='bar', color='red',
+                          ax=ax, width=width, position=1)
+    new_data.cumSum.plot(kind='bar', color='blue',
+                         ax=ax, width=width, position=0)
+    new_data.cumSumPer.plot(kind='bar', color='blue',
+                            ax=ax2, width=width, position=0)
 
     ax.set_ylabel('Number of Long-reads')
     ax.set_xlabel("Edit distance")
@@ -320,12 +336,13 @@ def show_plots_extract_lr_bc(rnames, alns, outfile):
 
     plt.savefig(outfile)
 
+
 def extract_lr_bc(args):
-    global a1,a2
+    global a1, a2
     a1 = args.short_read_adapter
     a2 = rev_compl(a1)
 
-    rnames,seqs = read_fastqs(args.reads, args.gzipped)
+    rnames, seqs = read_fastqs(args.reads, args.gzipped)
     alns = get_lr_bc_alns(seqs, args.threads)
     if len(args.ranges[0]) + len(args.ranges[1]) == 0:
         print('No ranges for SR adapters have been preset. Detecting directly from data...', file=sys.stderr)
@@ -343,6 +360,7 @@ def extract_lr_bc(args):
     if args.plotfile != None:
         show_plots_extract_lr_bc(rnames, alns, args.plotfile)
 
+
 def get_barcode_hist(barcode_cnts, total, step_size):
     remaining = total
     distribution = {}
@@ -354,14 +372,16 @@ def get_barcode_hist(barcode_cnts, total, step_size):
         distribution[idx] = 1 - remaining / total
     return distribution
 
+
 def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
     x = sorted(distribution.keys())
     y1 = [distribution[idx]*100 for idx in x]
     y2 = [distribution[idx]*100 for idx in x]
     for idx in range(1, len(y2)):
         y2[idx] = y1[idx] - y1[idx-1]
-    fig = plt.figure(figsize=(10,5))
-    fig.suptitle(f'SR coverage with each additional {step_size} unique barcodes')
+    fig = plt.figure(figsize=(10, 5))
+    fig.suptitle(
+        f'SR coverage with each additional {step_size} unique barcodes')
     ax1 = fig.add_subplot(111)
     plt.xticks(
         range(step_size, max(x), step_size*ceil(max(x)/step_size/18)),
@@ -371,7 +391,8 @@ def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
 
     plot_lines = list()
     plot_lines.extend(
-        ax1.plot(x, y1, color='#1b9e77', label='Cumulative % coverage (left y-axis)')
+        ax1.plot(x, y1, color='#1b9e77',
+                 label='Cumulative % coverage (left y-axis)')
     )
     plot_lines.extend(
         ax2.plot(x, y2, color='#d95f02', label=f'Coverage (right y-axis)')
@@ -379,30 +400,32 @@ def plot_sr_bc_coverage(distribution, step_size, last_idx, outfile):
     ax2.yaxis.set_major_formatter(mtick.PercentFormatter())
     ax1.yaxis.set_major_formatter(mtick.PercentFormatter())
     plot_lines.extend(
-        ax2.plot([last_idx,last_idx], [min(y2), max(y2)], color='#7570b3', label='Selected barcodes',ls='dashed')
+        ax2.plot([last_idx, last_idx], [min(y2), max(y2)],
+                 color='#7570b3', label='Selected barcodes', ls='dashed')
     )
-    plt.legend(plot_lines, [l.get_label() for l in plot_lines], loc='center right')
+    plt.legend(plot_lines, [l.get_label()
+               for l in plot_lines], loc='center right')
     plt.savefig(outfile)
-
 
 
 def extract_sr_barcode(bamfile, threads):
     print(f'\n====\nExtracting SR barcodes from {bamfile}:')
     barcodes = list()
     total = 0
-    alns_per_contig = {x.contig:x.total for x in pysam.AlignmentFile(bamfile, 'rb').get_index_statistics()}
+    alns_per_contig = {x.contig: x.total for x in pysam.AlignmentFile(
+        bamfile, 'rb').get_index_statistics()}
     imap_args = [
-        (bamfile,x['SN'])
+        (bamfile, x['SN'])
         for x in pysam.AlignmentFile(bamfile, 'rb').header['SQ']
-    ] 
+    ]
     p = Pool(threads)
-    with tqdm(total=sum(alns_per_contig.values())) as tqdm_bar:  
-        for contig,c_total,c_barcodes in tqdm(p.imap_unordered(read_bam_contig, imap_args, chunksize=1), total=len(imap_args)):
+    with tqdm(total=sum(alns_per_contig.values())) as tqdm_bar:
+        for contig, c_total, c_barcodes in tqdm(p.imap_unordered(read_bam_contig, imap_args, chunksize=1), total=len(imap_args)):
             tqdm_bar.update(alns_per_contig[contig])
             barcodes.extend(c_barcodes)
             total += c_total
-    p.close()        
-    return total,barcodes
+    p.close()
+    return total, barcodes
 
 
 def read_bam_contig(args):
@@ -414,19 +437,21 @@ def read_bam_contig(args):
             continue
         tags = dict(aln.tags)
         C = tags.get('CB', 'NA').split('-')[0]
-        total+=1
+        total += 1
         if C == 'NA':
             continue
         barcodes.append(C)
-    return contig,total,barcodes
+    return contig, total, barcodes
+
 
 def extract_sr_bc(args):
     total, barcodes = extract_sr_barcode(args.input, args.threads)
 
     print("\n=====\nCounting and sorting barcodes")
     barcode_cnts = Counter(barcodes)
-    barcode_cnts_tuple = sorted(barcode_cnts.items(), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
-    barcodes,barcode_cnts = tuple(zip(*barcode_cnts_tuple))
+    barcode_cnts_tuple = sorted(barcode_cnts.items(
+    ), key=lambda x: x[1], reverse=True)[:args.max_barcode_cnt]
+    barcodes, barcode_cnts = tuple(zip(*barcode_cnts_tuple))
     barcode_hist = get_barcode_hist(
         barcode_cnts=barcode_cnts_tuple,
         step_size=args.step_size,
@@ -435,7 +460,7 @@ def extract_sr_bc(args):
 
     last_idx = len(barcodes)
     last_f = 0
-    for idx,f in sorted(barcode_hist.items()):
+    for idx, f in sorted(barcode_hist.items()):
         if idx == 0:
             continue
         if f-last_f < args.thresh:
@@ -457,9 +482,10 @@ def extract_sr_bc(args):
         outfile = gzip.open(args.outfile, 'wt+')
     else:
         outfile = sys.stdout
-    for b, c in tqdm(zip(barcodes[:last_idx],barcode_cnts[:last_idx]), total=last_idx):
+    for b, c in tqdm(zip(barcodes[:last_idx], barcode_cnts[:last_idx]), total=last_idx):
         outfile.write(f'{b}\t{c}\n')
     outfile.close()
+
 
 map_char = [0 for _ in range(128)]
 map_char[ord('A')] = 0
@@ -650,7 +676,8 @@ def run_get_matches_prefix(max_error, threads):
     args = [(max_error, p) for p in prefixes]
     print(args)
     result = dict()
-    print(f'Running get_matches_prefix on {threads} threads and {len(args)} tasks')
+    print(
+        f'Running get_matches_prefix on {threads} threads and {len(args)} tasks')
     with Pool(threads) as p:
         for proc_result in tqdm(p.imap(get_matches_prefix, args, chunksize=1), total=len(args)):
             for rid, (e, X) in proc_result.items():
@@ -690,13 +717,15 @@ def show_plot_match_trie(full_data, plotfile, max_error):
 
         barcodes.append(tmp_barcodes)
 
-    trie_dataframe = pd.DataFrame({"read_id": read_id, "barcodes": barcodes, "distance": distance})
+    trie_dataframe = pd.DataFrame(
+        {"read_id": read_id, "barcodes": barcodes, "distance": distance})
     new_data = trie_dataframe.groupby("distance").count()
     fig = plt.figure()
     ax = fig.add_subplot(111)
     width = 0.2
 
-    new_data.read_id.plot(kind='bar', color='red', ax=ax, width=width, position=1)
+    new_data.read_id.plot(kind='bar', color='red',
+                          ax=ax, width=width, position=1)
 
     ax.set_ylabel('Number of long-reads')
     ax.set_xlabel("Edit distance")
@@ -734,7 +763,8 @@ def match_tire(args):
         outfile.write(f'{e}\t')
         outfile.write(f'{len(bids)}\t')
         outfile.write(f'{seg}\t')
-        outfile.write(f'{",".join([barcodes[b] if s else rev_compl(barcodes[b]) for b, s in sorted(bids)])}\n')
+        outfile.write(
+            f'{",".join([barcodes[b] if s else rev_compl(barcodes[b]) for b, s in sorted(bids)])}\n')
     outfile.close()
 
 
