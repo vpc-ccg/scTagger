@@ -1,3 +1,5 @@
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/sctagger/README.html)
+
 # scTagger
 scTagger matches barcodes of short- and long-reads of single-cell RNA-seq experiments to achieve the information of both datasets. 
 
