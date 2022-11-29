@@ -3,6 +3,14 @@ scTagger matches barcodes of short- and long-reads of single-cell RNA-seq experi
 
 ## Installation
 
+### Conda
+scTagger is available as a [Conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/) package:
+
+```bash
+conda create -n sctagger-env -c bioconda sctagger 
+conda activate sctagger-env
+scTagger.py -h
+```
 
 ### Running with Snakemake
 We provided a simple `Snakefile` alongside a `config.yaml` file that runs the three stages of scTagger as well as Cell Ranger (assumes Cell Ranger is in path). 
