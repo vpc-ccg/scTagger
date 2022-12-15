@@ -58,7 +58,7 @@ To run this step, you can use the following command.
 The second step is to extract the top short-reads barcodes that cover most of the reads.
 
 ```
-./scTagger.py extract_top_sr_bc -i "path/to/bam/file" -o "path/to/output/file" -p "path/to/output/plot"
+./scTagger.py extract_sr_bc -i "path/to/bam/file" -o "path/to/output/file" -p "path/to/output/plot"
 ```
 
 **Arguments**

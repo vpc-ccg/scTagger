@@ -13,19 +13,11 @@ clrg_d = f"{os.path.abspath(outpath)}/cellranger-out"
 rule all:
     input:
         expand(
-            f"{clrg_d}/{{sample}}/{{sample}}/outs/possorted_genome_bam.bam",
+            f"{outpath}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz",
             sample=config["samples"],
         ),
         expand(
-            f"{outpath}/{{sample}}/{{sample}}.sr_bc.tsv.gz",
-            sample=config["samples"]
-        ),
-        expand(
-            f"{outpath}/{{sample}}/{{sample}}.lr_bc.tsv.gz",
-            sample=config["samples"]
-        ),
-        expand(
-            f"{outpath}/{{sample}}/{{sample}}.lr_bc_matches.tsv.gz",
+            f"{outpath}/{{sample}}/{{sample}}.lr_bc_from_lr_matches.tsv.gz",
             sample=config["samples"],
         ),
 
@@ -96,6 +88,35 @@ rule extract_lr_bc:
     shell:
         "{params.script} extract_lr_bc -r {input.reads} -o {output.tsv} -t {threads}"
 
+rule extract_sr_bc_from_lr:
+    input:
+        tsv=f"{outpath}/{{sample}}/{{sample}}.lr_bc.tsv.gz",
+        wl=lambda wildcards: config["samples"][wildcards.sample]["whiltlist"],
+    output:
+        tsv=f"{outpath}/{{sample}}/{{sample}}.sr_bc_from_lr.tsv.gz",
+    params:
+        script=config["exec"]["scTagger"],
+    resources:
+        mem="16G",
+        time=59,
+    shell:
+        "{params.script} extract_sr_bc_from_lr -i {input.tsv} -wl {input.wl} -o {output.tsv}"
+
+
+rule match_trie_from_lr:
+    input:
+        lr_tsv=f"{outpath}/{{sample}}/{{sample}}.lr_bc.tsv.gz",
+        sr_tsv=f"{outpath}/{{sample}}/{{sample}}.sr_bc_from_lr.tsv.gz",
+    output:
+        lr_tsv=f"{outpath}/{{sample}}/{{sample}}.lr_bc_from_lr_matches.tsv.gz",
+    params:
+        script=config["exec"]["scTagger"],
+    threads: 32
+    resources:
+        mem="64G",
+        time=60 * 5 - 1,
+    shell:
+        "{params.script} match_trie -lr {input.lr_tsv} -sr {input.sr_tsv} -o {output.lr_tsv} -t {threads}"
 
 rule match_trie:
     input:
