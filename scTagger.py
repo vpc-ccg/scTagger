@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 
 import edlib
 import pysam
+import ahocorasick
 
 
 def parse_args():
@@ -49,7 +50,7 @@ def parse_args():
 
     parser_top_sr = subparsers.add_parser('extract_sr_bc')
     parser_top_sr.add_argument("-i", "--input", type=str, required=True,
-                               help="Input file")
+                               help="Input BAM file")
     parser_top_sr.add_argument("-o", "--outfile", type=str, default=None,
                                help="Path to output file. Default: STDOUT")
     parser_top_sr.add_argument("-p", "--plotfile", type=str, default=None,
@@ -61,6 +62,20 @@ def parse_args():
     parser_top_sr.add_argument("--step-size", type=int, default=1000,
                                help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
     parser_top_sr.add_argument("--max-barcode-cnt", type=int, default=25_000,
+                               help="Max number of barcodes to keep. Default: 25000")
+
+    parser_sr_bc_from_lr = subparsers.add_parser('extract_sr_bc_from_lr')
+    parser_sr_bc_from_lr.add_argument("-i", "--input", type=str, required=True,
+                               help="Input TSV file generated from extract_lr_bc step")
+    parser_sr_bc_from_lr.add_argument("-o", "--outfile", type=str, default=None,
+                               help="Path to output file. Default: STDOUT")
+    parser_sr_bc_from_lr.add_argument("-wl", "--barcode-whitelist", type=str, required=True,
+                               help="Path to TXT barcode whiltelist such as 10x Chromimum v3 3M-february-2018.txt.gz barcode file")
+    parser_sr_bc_from_lr.add_argument("--thresh", type=float, default=0.005,
+                               help="Percentage theshold required per step to continue adding read barcodes. Default: 0.005")
+    parser_sr_bc_from_lr.add_argument("--step-size", type=int, default=1000,
+                               help="Number of barcodes processed at a time and whose sum is used to check against the theshold. Default: 1000")
+    parser_sr_bc_from_lr.add_argument("--max-barcode-cnt", type=int, default=25_000,
                                help="Max number of barcodes to keep. Default: 25000")
 
     parser_match_trie = subparsers.add_parser('match_trie')
@@ -113,6 +128,11 @@ def parse_args():
         assert args.threads > 0
 
     if args.subcommand == 'extract_sr_bc':
+        assert 0 <= args.thresh <= 1
+        assert 0 < args.step_size
+        assert 0 < args.max_barcode_cnt
+
+    if args.subcommand == 'extract_sr_bc_from_lr':
         assert 0 <= args.thresh <= 1
         assert 0 < args.step_size
         assert 0 < args.max_barcode_cnt
@@ -733,7 +753,7 @@ def show_plot_match_trie(full_data, plotfile, max_error):
     plt.savefig(plotfile)
 
 
-def match_tire(args):
+def match_trie(args):
     read_sr_barcodes(args.short_read_barcodes)
     barcode_lens = {len(b) for b in barcodes}
     assert barcode_lens == {args.barcode_length}, barcode_lens
@@ -767,6 +787,60 @@ def match_tire(args):
             f'{",".join([barcodes[b] if s else rev_compl(barcodes[b]) for b, s in sorted(bids)])}\n')
     outfile.close()
 
+def extract_sr_bc_from_lr(args):
+    if args.barcode_whitelist.endswith('.gz'):
+        infile = gzip.open(args.barcode_whitelist, 'rt')
+    else:
+        infile = open(args.barcode_whitelist)
+    print(f'Reading whiltelist barcodes from: {args.barcode_whitelist}')
+    barcodes = [l[:-1] for l in tqdm(infile)]
+    infile.close()
+
+    A = ahocorasick.Automaton()
+    print(f'\n=====\nAdding forward barcodes...')
+    for idx,bc in tqdm(enumerate(barcodes), total=len(barcodes)):
+        A.add_word(bc,idx)
+    print(f'\n=====\nAdding reverse compliment barcodes...')
+    for idx,bc in tqdm(enumerate(barcodes), total=len(barcodes)):
+        A.add_word(rev_compl(bc),-idx)
+    print(f'\n=====\nBuilding Aho-Corasick automaton...')
+    A.make_automaton()    
+
+
+    if args.input.endswith('.gz'):
+        infile = gzip.open(args.input, 'rt')
+    else:
+        infile = open(args.input)
+    print(f'\n=====\nMatching exact barcodes on long-reads: {args.input}')
+    C = Counter()
+    for l in tqdm(infile):
+        _,_,p,seg = l.rstrip('\n').split('\t')
+        if p=='NA':
+            continue
+        hits = tuple(A.iter(seg))
+        if len(hits) > 1:
+            continue
+        for _,bc in hits:
+            C[abs(bc)]+=1
+    print(f'\n=====\nFound {len(C):,} unique barcodes on long-reads') 
+    sorted_bc = sorted(C.items(), reverse=True, key=lambda x: x[1])[:args.max_barcode_cnt]
+    
+    total = sum(c for _,c in sorted_bc)
+    for last_idx in range(0, len(sorted_bc), args.step_size):
+        percent = sum(c for _,c in sorted_bc[last_idx:last_idx+args.step_size])/total
+        if percent < args.thresh:
+            break
+    sorted_bc = sorted_bc[:last_idx+args.step_size]
+
+    print(f"\n=====\nWriting the top {len(sorted_bc)} barcodes")
+    if args.outfile:
+        outfile = gzip.open(args.outfile, 'wt+')
+    else:
+        outfile = sys.stdout
+    for bc,c in tqdm(sorted_bc):
+        outfile.write(f'{barcodes[bc]}\t{c}\n')
+    outfile.close()
+
 
 def main():
     args = parse_args()
@@ -778,8 +852,11 @@ def main():
     if args.subcommand == 'extract_sr_bc':
         extract_sr_bc(args)
 
+    if args.subcommand == 'extract_sr_bc_from_lr':
+        extract_sr_bc_from_lr(args)
+
     if args.subcommand == 'match_trie':
-        match_tire(args)
+        match_trie(args)
 
 
 if __name__ == "__main__":

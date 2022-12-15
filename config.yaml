@@ -7,6 +7,8 @@ exec:
 samples:
     s1:
         ref: homo_sapiens
+        whiltlist:
+            test/refs/3M-february-2018.txt.gz
         lr_fastqs:
             - test/data/lr/TestSample_pass_fastq_concat.fastq
         sr:
