@@ -119,7 +119,7 @@ def parse_args():
                 s, e = -e, -s + 1
             else:
                 assert False, (strand)
-            for i in np.arange(s, e):
+            for i in np.arange(s, e+1):
                 assert not i in ranges_dicts[ranges_idx], (
                     ranges_idx, i, ranges_dicts[ranges_idx])
                 ranges_dicts[ranges_idx][i] = len(ranges[ranges_idx])
@@ -198,6 +198,8 @@ def get_alns(seq):
 
 def get_ranges(data):
     ranges = list()
+    if len(data) == 0:
+        return ranges    
     min_l = min(data)
     max_l = max(data)
     L = np.arange(min_l, max_l+1)
