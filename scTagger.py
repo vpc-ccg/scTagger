@@ -802,7 +802,7 @@ def extract_sr_bc_from_lr(args):
     print(f'\n=====\nAdding forward barcodes...')
     for idx,bc in tqdm(enumerate(barcodes), total=len(barcodes)):
         A.add_word(bc,idx)
-    print(f'\n=====\nAdding reverse compliment barcodes...')
+    print(f'\n=====\nAdding reverse complement barcodes...')
     for idx,bc in tqdm(enumerate(barcodes), total=len(barcodes)):
         A.add_word(rev_compl(bc),-idx)
     print(f'\n=====\nBuilding Aho-Corasick automaton...')
